@@ -38,7 +38,13 @@ function updateProof(p,job){proof=p;busy=job==='building';$('#build').disabled=b
  $('#issue-title').textContent=p?`Publication checks (${p.issues.length} issue${p.issues.length===1?'':'s'})`:'Publication checks';
  if(!p){$('#proof').hidden=true;$('#proof').removeAttribute('src');$('#open-proof').hidden=true;$('#empty').hidden=false;$('#empty').textContent='Build proofs to review this manuscript.';$('#proof-note').textContent='No proof built yet.';$('#log').hidden=true;return} const base=`/proof/${encodeURIComponent(article)}/${p.run}`;$('#log').href=base+'/build.log';$('#log').hidden=false;
  $('#proof-note').textContent=busy?'Building a fresh proof…':!p.current?'This proof is out of date. Build a new proof.':p.state==='failed'?'Build failed. Check the issues and build log.':p.release_ready?'Current proof. Ready for final review and approval.':'Current draft proof. Resolve publication issues before approval.';
- if(p.outputs?.['article.'+format]){const url=base+'/outputs/article.'+format;$('#open-proof').href=url;$('#open-proof').hidden=false;if($('#proof').getAttribute('src')!==url)$('#proof').src=url;$('#proof').hidden=false;$('#empty').hidden=true}else{$('#open-proof').hidden=true;$('#proof').hidden=true;$('#empty').hidden=false;$('#empty').textContent=format==='pdf'?'No PDF is available for this build.':'The proof will appear when the build finishes.'}
+ if(p.outputs?.['article.'+format]){const url=base+'/outputs/article.'+format;$('#open-proof').href=url;$('#open-proof').hidden=false;const frame=$('#proof');
+ // Chrome's native PDF viewer cannot run inside a sandboxed frame.
+ // Keep manuscript HTML sandboxed; only generated PDFs use the native viewer.
+ const sandbox=format==='pdf'?null:'allow-scripts';
+ const sandboxChanged=frame.getAttribute('sandbox')!==sandbox;
+ if(sandbox===null)frame.removeAttribute('sandbox');else frame.setAttribute('sandbox',sandbox);
+ if(sandboxChanged||frame.getAttribute('src')!==url)frame.src=url;$('#proof').hidden=false;$('#empty').hidden=true}else{$('#open-proof').hidden=true;$('#proof').hidden=true;$('#empty').hidden=false;$('#empty').textContent=format==='pdf'?'No PDF is available for this build.':'The proof will appear when the build finishes.'}
 }
 async function load(name){$('#editor').disabled=true;$('#article').disabled=true;try{await save();const r=await api('/api/manuscript/'+encodeURIComponent(name));article=name;$('#article').value=name;files=r.files;const parts=sourceParts();frontMatter=parts.head;manuscriptBody=parts.body;editRevision=r.edit_revision;dirty=false;$('#editor').value=editorText();$('#download').style.display='none';updateProof(r.proof,r.job);status('Ready to edit.');}finally{$('#editor').disabled=false;$('#article').disabled=false}}
 
