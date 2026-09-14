@@ -100,17 +100,51 @@ editor supplies the reviewed run and article ID. It verifies that the source
 still matches and copies those proof files without rerendering. Merge alone
 does not publish an article.
 
-## Optional LLM review
+## Agent review and proofreading
+
+In the workspace, choose **Download review package** to export the saved manuscript,
+accepted originals, available proofs, PDF page images, validation results and a
+portable runner. Extract the ZIP and follow its README to use Codex, `claude -p`,
+agy or OpenRouter. All three review passes (import fidelity, proof fidelity and
+proofreading) are included by default. Export makes no model calls.
 
 ```bash
 .venv/bin/python engine/scripts/review_packet.py manuscripts/Stylometry
+# In the extracted review-package directory:
+python3 review.py run --provider codex
 ```
 
-This prepares a source-bound prompt and review packet under `_build/llm-review/`.
-Use them with a chosen LLM to check extraction fidelity against the originals
-and proofs. Suggestions must include source evidence and remain reviewable.
-The command makes no API calls, incurs no model charges and applies no edits.
-LLM findings cannot override validation or approve a manuscript.
+Use **Import review findings** to load the resulting `review.json`. The workspace
+shows evidence, proposed corrections, coverage, limitations and revision status.
+Suggestions are applied manually; build fresh proofs after editing. Findings do
+not override publication validation or approve a manuscript.
+
+See [the package README](engine/review/README.md) for all provider commands,
+OpenRouter image support and cost controls, evidence semantics and troubleshooting.
+OpenRouter includes labeled PNG/JPEG/WebP images and rendered PDF pages; choose a
+vision model supporting structured outputs. PDF sidecars require Poppler's
+`pdftotext` and `pdftoppm` on the workspace host. Missing extraction/rendering is
+reported in the package. The extracted runner needs only Python 3.10+ and the
+selected, authenticated CLI (or an OpenRouter API key).
+
+## Uploading manuscripts and checking spelling
+
+Choose **Upload manuscript**, enter a new article ID, and select editable Word,
+Quarto, Markdown or LaTeX files. Include the accepted PDF as reference evidence;
+PDF-only import is not supported. For projects with folders, figures and a
+bibliography, upload a ZIP. Limits: 30 MB total, 100 uploaded files, 2,000 archive
+entries and 100 MB expanded per archive. Remove hidden configuration files from
+ZIPs. Use **Main source** for ambiguous projects, e.g. `paper/main.tex`.
+
+Imports are staged and installed only on success. Existing manuscript IDs are
+never overwritten. Uploaded originals stay under `source/`; complete the
+publication fields before building proofs. Upload stays on the local workspace
+host and does not publish, commit files or contact a model provider.
+
+Browser spell checking is enabled for the Manuscript tab. Toggle it or choose UK/US
+English under **Language and agent review**. Metadata and bibliography tabs do not
+use spell checking. Underlining and suggestions require the relevant dictionary
+to be enabled in your browser/OS; citation keys and technical words may be flagged.
 
 ## Development
 

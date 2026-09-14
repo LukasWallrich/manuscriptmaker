@@ -14,6 +14,8 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 import build
+import review_packet
+import upload
 
 ROOT = build.ROOT
 EDITABLE = ("article.qmd", "_metadata.yml", "references.bib")
@@ -115,7 +117,15 @@ class Handler(BaseHTTPRequestHandler):
                 p = manuscript(path.rsplit("/", 1)[-1])
                 files = read_files(p)
                 return self.send(dict(files=files, edit_revision=edit_revision(files),
-                                      proof=proof_state(p), job=JOBS.get(p.name)))
+                                      proof=proof_state(p), review=review_packet.review_state(p), job=JOBS.get(p.name)))
+            if path.startswith("/review-package/"):
+                parts = path.split("/")
+                p = manuscript(parts[2])
+                packet_id = parts[3]
+                if len(packet_id) != 32 or any(c not in "0123456789abcdef" for c in packet_id):
+                    raise ValueError("Unknown review package")
+                target = ROOT / "_build/llm-review" / p.name / packet_id / "review-package.zip"
+                return self.send(target.read_bytes(), "application/zip")
             if path.startswith("/proof/"):
                 parts = path.split("/")
                 p = manuscript(parts[2])
@@ -141,9 +151,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send({"error": "Reload the workspace to continue"}, status=403)
         try:
             size = int(self.headers.get("Content-Length", 0))
-            if not 0 < size <= 10_000_000:
+            if not 0 < size <= (42_000_000 if self.path == "/api/upload" else 10_000_000):
                 raise ValueError("Request is empty or too large")
             data = json.loads(self.rfile.read(size))
+            if self.path == "/api/upload":
+                with LOCK:
+                    name = upload.create(data["article"], data["files"], data.get("main", ""))
+                return self.send(dict(article=name))
             p = manuscript(data["article"])
             if self.path == "/api/save":
                 revision = save_files(p, data["files"], data["edit_revision"])
@@ -151,6 +165,16 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/build":
                 start_build(p, bool(data.get("no_pdf")))
                 return self.send(dict(state="building"))
+            if self.path == "/api/review-package":
+                with LOCK:
+                    if JOBS.get(p.name) == "building":
+                        raise ValueError("Wait for the proof build to finish before exporting")
+                    folder = review_packet.packet(p)
+                return self.send(dict(download=f"/review-package/{p.name}/{folder.name}"))
+            if self.path == "/api/review-import":
+                if not isinstance(data.get("result"), dict):
+                    raise ValueError("Choose a review.json result")
+                return self.send(dict(review=review_packet.import_result(p, data["result"])))
             if self.path == "/api/approve":
                 state = proof_state(p)
                 if not state or data.get("run") != state["run"]:
@@ -159,7 +183,7 @@ class Handler(BaseHTTPRequestHandler):
                 build.approve(p, run)
                 return self.send(dict(download=f"/proof/{p.name}/{run.name}/publication.zip"))
             self.send({"error": "Not found"}, status=404)
-        except (OSError, ValueError, KeyError, TypeError) as e:
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError, upload.zipfile.BadZipFile) as e:
             self.send({"error": str(e)}, status=400)
 
 

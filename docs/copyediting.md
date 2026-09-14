@@ -22,9 +22,15 @@ workspace supplies autosave, conflict detection, proof viewing and download.
   tracked Word changes and unusual bibliography formats. Import skips LaTeX
   package loading and preserves unknown content for review; unsupported cases
   need an explicit adapter rather than silent deletion.
-- Make optional LLM review a provider integration after evaluating the
-  evidence-bearing review packets against these fixtures. No automatic model
-  calls or unreviewed corrections are part of the current build.
+- Evaluate the portable agent reviews against deliberately corrupted fixtures:
+  dropped paragraphs, swapped table cells, citation loss and caption mismatches.
+  The runner validates output structure and quoted text but model error rates
+  have not yet been benchmarked. Provider commands are tested with fixtures/mocks;
+  live provider compatibility depends on installed CLI/model versions.
+- Add a frozen initial-import baseline and recorded editorial decisions so import
+  fidelity findings can distinguish conversion errors from intended copy-edits.
+- Add section/page batching for manuscripts exceeding model context/image limits.
+  The current runner requests selected passes in one invocation and reports limits.
 
 ## Fixtures
 
