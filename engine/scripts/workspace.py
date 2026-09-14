@@ -16,11 +16,12 @@ from urllib.parse import unquote, urlparse
 import build
 import review_packet
 import upload
+import editorial
 
 ROOT = build.ROOT
 EDITABLE = ("article.qmd", "_metadata.yml", "references.bib")
 TOKEN = secrets.token_urlsafe(24)
-LOCK = threading.Lock()
+LOCK = threading.RLock()
 JOBS = {}
 
 
@@ -117,7 +118,7 @@ class Handler(BaseHTTPRequestHandler):
                 p = manuscript(path.rsplit("/", 1)[-1])
                 files = read_files(p)
                 return self.send(dict(files=files, edit_revision=edit_revision(files),
-                                      proof=proof_state(p), review=review_packet.review_state(p), job=JOBS.get(p.name)))
+                                      proof=proof_state(p), review=review_packet.review_state(p), comments=editorial.comments(p, files), job=JOBS.get(p.name)))
             if path.startswith("/review-package/"):
                 parts = path.split("/")
                 p = manuscript(parts[2])
@@ -138,6 +139,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("Unknown proof file")
                 import mimetypes
                 return self.send(target.read_bytes(), mimetypes.guess_type(target.name)[0] or "application/octet-stream")
+            if path == "/rich-editor.js":
+                return self.send((ROOT / "engine/workspace/rich-editor.js").read_bytes(), "text/javascript; charset=utf-8")
             if path == "/logo.png":
                 return self.send((ROOT / "themes/r2/assets/logo.png").read_bytes(), "image/png")
             if path == "/Carlito-Regular.ttf":
@@ -175,6 +178,25 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(data.get("result"), dict):
                     raise ValueError("Choose a review.json result")
                 return self.send(dict(review=review_packet.import_result(p, data["result"])))
+            if self.path == "/api/details":
+                with LOCK:
+                    files = read_files(p)
+                    if data.get("edit_revision") != edit_revision(files):
+                        raise ValueError("Manuscript changed; reload the metadata form")
+                    if "details" in data:
+                        updated = editorial.details(files, data["details"])
+                        save_files(p, updated, data["edit_revision"])
+                    return self.send(dict(details=editorial.details(read_files(p))))
+            if self.path in {"/api/review-decision", "/api/comment"}:
+                with LOCK:
+                    files = read_files(p)
+                    if data.get("edit_revision") != edit_revision(files):
+                        raise ValueError("Manuscript changed. Reload before applying this action.")
+                    if self.path == "/api/review-decision":
+                        editorial.decide(p, data["report_id"], data["packet_id"], data["index"], data["decision"], files,
+                            lambda updated: save_files(p, updated, data["edit_revision"]))
+                        return self.send(dict(review=review_packet.review_state(p)))
+                    return self.send(dict(comments=editorial.comment(p, files, data)))
             if self.path == "/api/approve":
                 state = proof_state(p)
                 if not state or data.get("run") != state["run"]:

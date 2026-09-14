@@ -1,0 +1,49 @@
+{
+  "packet_id": "70f91a57ff224249b5f2c6b7e8f8dd73",
+  "passes": [
+    "proofreading"
+  ],
+  "summary": "Completed the proofreading pass on canonical/article.qmd. Identified one grammatical issue regarding subject-verb agreement.",
+  "limitations": [
+    "Synthetic test; no real participant data.",
+    "Text evidence only; binary/image files were not inspected.",
+    "Only the proofreading pass was requested and conducted."
+  ],
+  "coverage": [
+    {
+      "file": "originals/accepted.md",
+      "status": "unread",
+      "notes": "Unread; import-fidelity pass was not requested."
+    },
+    {
+      "file": "canonical/article.qmd",
+      "status": "checked",
+      "notes": "Checked full document (all sections, paragraphs, tables, and captions) for spelling, grammar, punctuation, and consistency."
+    },
+    {
+      "file": "proof-source/article.qmd",
+      "status": "unread",
+      "notes": "Unread; proof-fidelity pass was not requested."
+    },
+    {
+      "file": "proofs/article.md",
+      "status": "unread",
+      "notes": "Unread; proof-fidelity pass was not requested."
+    }
+  ],
+  "issues": [
+    {
+      "pass": "proofreading",
+      "severity": "warning",
+      "category": "grammar",
+      "file": "canonical/article.qmd",
+      "quote": "The results is consistent with the hypothesis.",
+      "source_file": "",
+      "source_quote": "",
+      "location": "Section 'A small replication study', final paragraph",
+      "explanation": "Subject-verb agreement error: the plural noun 'results' requires the plural verb 'are'.",
+      "suggested_correction": "The results are consistent with the hypothesis.",
+      "confidence": "high"
+    }
+  ]
+}

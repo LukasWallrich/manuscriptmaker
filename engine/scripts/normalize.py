@@ -70,6 +70,7 @@ def run(cmd: list[str], cwd: Path | None = None, input_text=None) -> None:
 def _is_real_source(p: Path) -> bool:
     """A candidate source file — skips Office lock files (~$foo.docx)."""
     return (p.is_file()
+            and "initial-import" not in p.parts
             and p.suffix.lower() in SUPPORTED - {".zip"}
             and not p.name.startswith("~$")
             and p.name != "PUT_MANUSCRIPT_HERE.md")
@@ -131,7 +132,7 @@ def from_docx(src: Path, mdir: Path) -> None:
         run(PANDOC + [str(src), "-f", "docx+citations", "-t", "csljson",
                       "-o", "_refs.json"], cwd=mdir)
         if refs_json.exists() and refs_json.read_text(encoding="utf-8").strip() not in ("", "[]"):
-            run(PANDOC + ["_refs.json", "-f", "csljson", "-t", "bibtex",
+            run(PANDOC + ["_refs.json", "-f", "csljson", "-t", "biblatex",
                           "-o", "references.bib"], cwd=mdir)
         else:
             _warn_no_bib(mdir)
@@ -140,8 +141,21 @@ def from_docx(src: Path, mdir: Path) -> None:
         _warn_no_bib(mdir)
 
     text = _convert_metafiles(mdir, body.read_text(encoding="utf-8"))
+    text = re.sub(r"(?m)^#{1,6}[ \t]*\n\n", "", text)
+    text = re.sub(r"(?m)^(#{1,6} .+?)[ \t]+$", r"\1", text)
+    text = _word_captions(text)
     _assemble_qmd(mdir, text)
     body.unlink(missing_ok=True)
+
+
+def _word_captions(text: str) -> str:
+    """Attach an explicit preceding Figure caption to its image, once."""
+    pattern = r'(?m)^(?:\*\*)?Figure (\d+)\.(?:\*\*)? ([^\n]+)\n\n!\[([^\n]*)\]\(([^)]+)\)(?:\{[^\n]*\})?'
+    def caption(match):
+        number, text, alt, target = match.groups()
+        # Word's dimensions can distort embedded bitmaps; preserve image aspect.
+        return '![' + text + '](' + target + '){#fig-import-' + number + '}'
+    return re.sub(pattern, caption, text)
 
 
 def from_latex(src: Path, mdir: Path) -> None:
@@ -167,9 +181,19 @@ def from_latex(src: Path, mdir: Path) -> None:
     import_text = re.sub(r"\\usepackage(?:\[[^\]]*\])?\{[^}]*\}", "", text)
     import_text = re.sub(r"\\cmidrule(?:\[[^\]]*\])?(?:\([^)]*\))?\{[^}]*\}", "", import_text)
     run(PANDOC + ["-s", "-f", "latex", "-t", "markdown",
+                  "--lua-filter=" + str(Path(__file__).with_name("latex-import.lua")),
                   "--extract-media=" + str(mdir / "figures"), "--wrap=none", "-o", str(body)],
         cwd=src.parent, input_text=import_text)
     text = body.read_text(encoding="utf-8").replace(str(mdir / "figures") + "/", "figures/")
+    def pdf_image(match):
+        filename = match.group(1)
+        image = mdir / filename
+        if not image.is_file():
+            raise SystemExit('Missing extracted figure: ' + filename)
+        png = image.with_suffix('.png')
+        run(['pdftoppm', '-singlefile', '-png', '-r', '200', str(image), str(png.with_suffix(''))])
+        return '](' + str(Path(filename).with_suffix('.png'))
+    text = re.sub(r'\]\(([^)\n]+?\.pdf)(?=[ )])', pdf_image, text)
     text = _convert_metafiles(mdir, text)
     _assemble_qmd(mdir, text, extracted)
     body.unlink(missing_ok=True)
@@ -178,6 +202,9 @@ def from_latex(src: Path, mdir: Path) -> None:
 def _extract_r2_macros(tex: str) -> dict:
     """Pull \\RtwoAbstract / \\keywords / \\recommendedcitation arguments."""
     out = {}
+    if re.search(r'\\label\{sec:', tex):
+        out['number-sections'] = True
+        out['secnumdepth'] = 2
     for macro, key in (("RtwoAbstract", "abstract"),
                        ("keywords", "keywords"),
                        ("recommendedcitation", "recommended-citation")):
@@ -204,17 +231,22 @@ def _assemble_qmd(mdir: Path, body: str, extracted: dict | None = None) -> None:
 
     extracted = extracted or {}
     meta = yaml.safe_load(fm) or {}
+    if (mdir / "references.bib").is_file() and (mdir / "references.bib").stat().st_size:
+        meta.pop("references", None)
     if "abstract" in extracted and not meta.get("abstract"):
         meta["abstract"] = extracted["abstract"]
     if "keywords" in extracted and not meta.get("keywords"):
         meta["keywords"] = [k.strip() for k in re.split(r"[,;]|\\and", extracted["keywords"]) if k.strip()]
+    for key in ('number-sections', 'secnumdepth'):
+        if key in extracted:
+            meta.setdefault(key, extracted[key])
     if meta:
         meta["bibliography"] = "references.bib"
         content = "---\n" + yaml.safe_dump(meta, allow_unicode=True, sort_keys=False) + "---\n\n" + body
     else:
         content = FRONT_MATTER_SKELETON.format(body=body)
         print("No metadata detected; complete the TODO fields before approval.")
-    (mdir / "article.qmd").write_text(content, encoding="utf-8")
+    (mdir / "article.qmd").write_text(content.rstrip() + "\n", encoding="utf-8")
     print("  wrote article.qmd")
 
 
@@ -236,15 +268,17 @@ def _convert_metafiles(mdir: Path, body: str) -> str:
     if not metafiles:
         return body
     emf2svg, wmf2svg, rsvg = (shutil.which(n) for n in ("emf2svg-conv", "wmf2svg", "rsvg-convert"))
-    if not rsvg or not (emf2svg or wmf2svg):
-        print(f"::warning::{len(metafiles)} EMF/WMF figure(s) found but the converters "
-              "(emf2svg-conv/wmf2svg + rsvg-convert) are not installed — figures left "
-              "unconverted. CI converts them automatically.")
-        return body
+    from metafile import embedded_bitmap, require_visible
     for mf in metafiles:
         is_emf = mf.suffix.lower() == ".emf"
+        png = mf.with_suffix(".png")
+        if is_emf and embedded_bitmap(mf, png):
+            require_visible(png)
+            body = body.replace(mf.relative_to(mdir).as_posix(), png.relative_to(mdir).as_posix())
+            print(f"  extracted full-frame bitmap: {mf.name} -> {png.name}")
+            continue
         converter = emf2svg if is_emf else wmf2svg
-        if not converter:
+        if not converter or not rsvg:
             print(f"::warning::No converter for {mf.suffix} — skipping {mf.name}.")
             continue
         svg, png = mf.with_suffix(".svg"), mf.with_suffix(".png")
@@ -256,10 +290,10 @@ def _convert_metafiles(mdir: Path, body: str) -> str:
             run([rsvg, "-o", str(png), str(svg)])
             svg.unlink()
         if png.exists():
+            require_visible(png)
             rel_old = mf.relative_to(mdir).as_posix()
             rel_new = png.relative_to(mdir).as_posix()
             body = body.replace(rel_old, rel_new)
-            mf.unlink()
             print(f"  converted {rel_old} -> {rel_new}")
         else:
             print(f"::warning::Could not convert {mf.name} to PNG.")
@@ -311,6 +345,12 @@ def main(manuscript_dir: str, *, source: str | None = None,
         from_docx(src, target)
     elif ext == ".tex":
         from_latex(src, target)
+    baseline = target / 'source' / 'initial-import'
+    if not baseline.exists():
+        baseline.mkdir(parents=True)
+        for name in ('article.qmd', 'references.bib', '_metadata.yml'):
+            if (target / name).exists():
+                shutil.copyfile(target / name, baseline / name)
     print(f"Import complete: {target / 'article.qmd'}")
     return 0
 

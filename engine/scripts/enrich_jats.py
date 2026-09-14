@@ -88,6 +88,21 @@ def enrich(xml_path: Path, manuscript_dir: Path, *, draft=False, issues_path=Non
         journal_meta.insertBefore(_text_el(doc, "journal-id", meta.get("ojs", {}).get("journal-path", "journal"),
                                            **{"journal-id-type": "publisher-id"}), journal_meta.firstChild)
 
+    # Restore explicit source email values; an empty Quarto email can otherwise
+    # inherit a boolean from its author metadata context in the JATS template.
+    contributors = [n for n in article_meta.getElementsByTagName("contrib")
+                    if n.getAttribute("contrib-type") == "author"]
+    authors = meta.get("_authors", [])
+    if len(contributors) != len(authors):
+        raise ValueError("JATS contributor count does not match manuscript authors")
+    for contributor, author in zip(contributors, authors):
+        for email in list(contributor.getElementsByTagName("email")):
+            email.parentNode.removeChild(email)
+        if author.get("email"):
+            contributor.appendChild(_text_el(doc, "email", author["email"]))
+        if author.get("corresponding"):
+            contributor.setAttribute("corresp", "yes")
+
     # --- DOI as <article-id pub-id-type="doi"> ------------------------
     if r2.get("doi"):
         has_doi = any(n.getAttribute("pub-id-type") == "doi"

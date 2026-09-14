@@ -1,6 +1,4 @@
 ---
-number-sections: true
-secnumdepth: 2
 abstract: 'Maintaining anonymity in natural language communication remains a challenging
   task. Even when the number of candidate authors is large, standard authorship attribution
   techniques that analyze writing style predict the original author with uncomfortably
@@ -18,24 +16,31 @@ abstract: 'Maintaining anonymity in natural language communication remains a cha
 
   '
 author:
-- name:
-    given: Haining
-    family: Wang
-  email: hw56@iu.edu
-  affiliations:
-  - ref: indiana-med
-- name:
-    given: Patrick
-    family: Juola
-  email: juola@mathcs.duq.edu
-  affiliations:
-  - ref: duquesne
-- name:
-    given: Allen
-    family: Riddell
-  email: riddella@iu.edu
-  affiliations:
-  - ref: indiana-bloomington
+- 'Haining Wang\
+
+  Indiana University School of Medicine\
+
+  Indianapolis, Indiana\
+
+  `hw56@iu.edu`\
+
+  Patrick Juola\
+
+  Duquesne University\
+
+  Pittsburgh, Pennsylvania\
+
+  `juola@mathcs.duq.edu`\
+
+  Allen Riddell\
+
+  Indiana University Bloomington\
+
+  Bloomington, Indiana\
+
+  `riddella@iu.edu`\
+
+  '
 bibliography: references.bib
 title: Reproduction and Replication of an Adversarial Stylometry Experiment
 keywords:
@@ -45,13 +50,6 @@ keywords:
 - stylometry
 - writing style
 - whistleblower protection
-affiliations:
-- id: indiana-med
-  name: Indiana University School of Medicine
-- id: duquesne
-  name: Duquesne University
-- id: indiana-bloomington
-  name: Indiana University Bloomington
 ---
 
 # Introduction

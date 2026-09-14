@@ -50,3 +50,6 @@ manuscripts/**/*.saving
 manuscripts/Stylometry/source/*
 !manuscripts/Stylometry/source/accepted-source.zip
 !manuscripts/Stylometry/source/accepted-proof.pdf
+
+!manuscripts/Stylometry/source/initial-import/
+!manuscripts/Stylometry/source/initial-import/**

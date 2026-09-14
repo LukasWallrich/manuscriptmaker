@@ -148,7 +148,7 @@ def test_jats_enrichment_is_valid_and_idempotent(manuscript):
     from lxml import etree
     import enrich_jats
     p = manuscript / 'article.xml'
-    p.write_text('''<article><front><article-meta><title-group><article-title>A test article</article-title></title-group><history/><abstract><p>Abstract</p></abstract></article-meta></front><body><p>Body</p></body></article>''')
+    p.write_text('''<article><front><article-meta><title-group><article-title>A test article</article-title></title-group><contrib-group><contrib contrib-type="author"><name><surname>Smith</surname><given-names>Alex</given-names></name><email>true</email></contrib></contrib-group><history/><abstract><p>Abstract</p></abstract></article-meta></front><body><p>Body</p></body></article>''')
     enrich_jats.enrich(p, manuscript)
     before = p.read_bytes()
     enrich_jats.enrich(p, manuscript)
@@ -156,6 +156,7 @@ def test_jats_enrichment_is_valid_and_idempotent(manuscript):
     tree = etree.parse(str(p))
     assert tree.xpath('string(//article-id[@pub-id-type="doi"])') == '10.1234/test.001'
     assert tree.xpath('string(//journal-title)') == 'Replication Research (R2)'
+    assert tree.xpath('string(//contrib/email)') == 'alex@example.org'
 
 
 def test_engine_changes_build_all_fixtures(tmp_path):

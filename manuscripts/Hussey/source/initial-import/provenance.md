@@ -1,0 +1,1 @@
+Reconstructed on 14 September 2026 from source/manuscript.docx using the current importer. This is a comparison baseline, not a historical record of the first import. Canonical metadata and ordered citation groups were completed from the accepted source after reconstruction.

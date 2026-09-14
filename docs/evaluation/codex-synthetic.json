@@ -1,0 +1,131 @@
+{
+  "packet_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "passes": [
+    "import-fidelity",
+    "proof-fidelity",
+    "proofreading"
+  ],
+  "summary": "Found five import differences requiring editorial judgment, one participant-count mismatch in the proof, and one grammatical error.",
+  "limitations": [
+    "Synthetic test; no real participant data.",
+    "No frozen initial-import baseline is available; import differences may be intentional edits.",
+    "Only Markdown/Quarto evidence was supplied. No rendered PDF or page images were available to inspect pagination, clipping, or visual layout.",
+    "The referenced accuracy.png and bibliography were not supplied; figure content and citation resolution could not be verified.",
+    "The evidence contains no authors, affiliations, abstract, equations, reference list, or footnotes to compare."
+  ],
+  "coverage": [
+    {
+      "file": "originals/accepted.md",
+      "status": "checked",
+      "notes": "Read the entire unpaginated document: title, recruitment and consent paragraphs, all table headers and cells, Figure 1 caption/path, and citation. Compared with canonical. Figure image unavailable."
+    },
+    {
+      "file": "canonical/article.qmd",
+      "status": "checked",
+      "notes": "Read the entire unpaginated document for import fidelity and proofreading: title, recruitment paragraph, complete table, Figure 1 caption/path, citation, and closing sentence. Checked content order and additions/omissions. Figure image and bibliography unavailable."
+    },
+    {
+      "file": "proof-source/article.qmd",
+      "status": "checked",
+      "notes": "Compared the entire unpaginated proof source with proofs/article.md, including title, every paragraph, all table cells/headers, caption/path, and citation."
+    },
+    {
+      "file": "proofs/article.md",
+      "status": "checked",
+      "notes": "Checked all supplied proof text against the exact proof source. Coverage includes title through closing sentence, complete table, caption/path, and citation. No rendered pages were supplied, so visual layout was not checked."
+    }
+  ],
+  "issues": [
+    {
+      "pass": "import-fidelity",
+      "severity": "warning",
+      "category": "omitted paragraph",
+      "file": "canonical/article.qmd",
+      "quote": "We recruited 120 participants from two universities.",
+      "source_file": "originals/accepted.md",
+      "source_quote": "The protocol required written consent before assignment.",
+      "location": "Body, between recruitment paragraph and table",
+      "explanation": "The accepted original includes this consent paragraph after recruitment; canonical proceeds directly to the table. Was its removal intentional? Editorial judgment is required before restoring it.",
+      "suggested_correction": null,
+      "confidence": "high"
+    },
+    {
+      "pass": "import-fidelity",
+      "severity": "warning",
+      "category": "table value changed",
+      "file": "canonical/article.qmd",
+      "quote": "| Control | 60 | 5.1 |",
+      "source_file": "originals/accepted.md",
+      "source_quote": "| Control | 60 | 4.2 |",
+      "location": "Table, Control row, Mean column",
+      "explanation": "The Control mean changed from 4.2 to 5.1. Is this an authorized numerical correction? Confirm with the editor before changing it.",
+      "suggested_correction": null,
+      "confidence": "high"
+    },
+    {
+      "pass": "import-fidelity",
+      "severity": "warning",
+      "category": "figure caption changed",
+      "file": "canonical/article.qmd",
+      "quote": "![Figure 1. Participant age by group.](accuracy.png)",
+      "source_file": "originals/accepted.md",
+      "source_quote": "![Figure 1. Response accuracy by group.](accuracy.png)",
+      "location": "Figure 1 caption, immediately after table",
+      "explanation": "The caption now describes participant age instead of response accuracy, while the image path is unchanged. Was this intentional? The image is unavailable to determine which caption is correct.",
+      "suggested_correction": null,
+      "confidence": "high"
+    },
+    {
+      "pass": "import-fidelity",
+      "severity": "warning",
+      "category": "citation key changed",
+      "file": "canonical/article.qmd",
+      "quote": "Results follow Smith (2020) [@missing2020].",
+      "source_file": "originals/accepted.md",
+      "source_quote": "Results follow Smith (2020) [@smith2020].",
+      "location": "Citation paragraph following Figure 1",
+      "explanation": "The citation key changed while the named author and year remain the same. Was this key replacement intentional? No bibliography is supplied to verify either key.",
+      "suggested_correction": null,
+      "confidence": "high"
+    },
+    {
+      "pass": "import-fidelity",
+      "severity": "warning",
+      "category": "added paragraph",
+      "file": "canonical/article.qmd",
+      "quote": "The results is consistent with the hypothesis.",
+      "source_file": "originals/accepted.md",
+      "source_quote": "Results follow Smith (2020) [@smith2020].",
+      "location": "Final paragraph; accepted original ends with the citation paragraph",
+      "explanation": "Canonical adds a claim of consistency with the hypothesis after the original's final paragraph. Is this an authorized editorial addition? Its grammatical error is reported separately.",
+      "suggested_correction": null,
+      "confidence": "high"
+    },
+    {
+      "pass": "proof-fidelity",
+      "severity": "warning",
+      "category": "participant count mismatch",
+      "file": "proofs/article.md",
+      "quote": "We recruited 102 participants from two universities.",
+      "source_file": "proof-source/article.qmd",
+      "source_quote": "We recruited 120 participants from two universities.",
+      "location": "Opening body paragraph beneath title",
+      "explanation": "The proof changes the recruitment count from 120 to 102. The exact proof source states 120.",
+      "suggested_correction": "We recruited 120 participants from two universities.",
+      "confidence": "high"
+    },
+    {
+      "pass": "proofreading",
+      "severity": "warning",
+      "category": "subject–verb agreement",
+      "file": "canonical/article.qmd",
+      "quote": "The results is consistent with the hypothesis.",
+      "source_file": "",
+      "source_quote": "",
+      "location": "Final paragraph",
+      "explanation": "The plural subject 'results' requires 'are'.",
+      "suggested_correction": "The results are consistent with the hypothesis.",
+      "confidence": "high"
+    }
+  ]
+}

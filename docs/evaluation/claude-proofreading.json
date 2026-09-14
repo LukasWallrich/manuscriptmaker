@@ -1,0 +1,75 @@
+{
+  "packet_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "passes": [
+    "proofreading"
+  ],
+  "summary": "Proofreading of canonical/article.qmd (14 lines). One objective grammar error (subject-verb agreement in the final sentence). Two optional consistency queries: a narrative-plus-bracketed citation that will render doubled and whose surname does not match the key, and a figure caption (\"age\") that does not match the referenced file (accuracy.png). Only the proofreading pass was requested and performed.",
+  "limitations": [
+    "Import-fidelity and proof-fidelity passes were not requested and were not performed.",
+    "originals/accepted.md, proof-source/article.qmd and proofs/article.md were not read: they are outside the requested proofreading pass.",
+    "No bibliography (.bib) or rendered output was available, so citation resolution and figure rendering could not be verified; the citation-key mismatch is left to the deterministic citation check."
+  ],
+  "coverage": [
+    {
+      "file": "canonical/article.qmd",
+      "status": "checked",
+      "notes": "Full file read, lines 1-14 (single untitled section). Checked spelling, grammar, punctuation, consistency and wording."
+    },
+    {
+      "file": "originals/accepted.md",
+      "status": "unread",
+      "notes": "Not part of the requested proofreading pass (import-fidelity source)."
+    },
+    {
+      "file": "proof-source/article.qmd",
+      "status": "unread",
+      "notes": "Not part of the requested proofreading pass (proof-fidelity source)."
+    },
+    {
+      "file": "proofs/article.md",
+      "status": "unread",
+      "notes": "Not part of the requested proofreading pass (proof output)."
+    }
+  ],
+  "issues": [
+    {
+      "pass": "proofreading",
+      "severity": "warning",
+      "category": "grammar",
+      "file": "canonical/article.qmd",
+      "quote": "The results is consistent with the hypothesis.",
+      "source_file": "",
+      "source_quote": "",
+      "location": "line 14, final paragraph",
+      "explanation": "Subject-verb agreement error: the plural subject \"results\" takes \"are\", not \"is\".",
+      "suggested_correction": "The results are consistent with the hypothesis.",
+      "confidence": "high"
+    },
+    {
+      "pass": "proofreading",
+      "severity": "suggestion",
+      "category": "citation-consistency",
+      "file": "canonical/article.qmd",
+      "quote": "Results follow Smith (2020) [@missing2020].",
+      "source_file": "",
+      "source_quote": "",
+      "location": "line 12",
+      "explanation": "Is the doubled citation intended? A narrative \"Smith (2020)\" followed by a bracketed key [@missing2020] will render as two citations in a row. The surname \"Smith\" also does not match the key \"missing2020\". Whether the key resolves in the bibliography is left to the deterministic citation check; this is only a consistency query about the visible text.",
+      "suggested_correction": null,
+      "confidence": "low"
+    },
+    {
+      "pass": "proofreading",
+      "severity": "suggestion",
+      "category": "consistency",
+      "file": "canonical/article.qmd",
+      "quote": "![Figure 1. Participant age by group.](accuracy.png)",
+      "source_file": "",
+      "source_quote": "",
+      "location": "line 10",
+      "explanation": "Please confirm the caption and file match: the caption describes \"Participant age by group\" but the referenced image file is named accuracy.png. One of the two may be wrong.",
+      "suggested_correction": null,
+      "confidence": "low"
+    }
+  ]
+}

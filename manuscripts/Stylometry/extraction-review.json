@@ -6,13 +6,14 @@
     "Three author names, emails and affiliation names transcribed from the author block",
     "Title, abstract and keywords imported from main.tex",
     "Bibliography selected from the declared references file, excluding references_stale.bib",
-    "Author-supplied PNG counterparts used for the two PDF figures",
-    "Booktabs table-rule commands excluded from text; RJ and Age labels and multirow spans retained"
+    "Figures rasterized from the exact PDF assets referenced by accepted main.tex; native captions retained in HTML/PDF/JATS",
+    "Booktabs table-rule commands excluded from text; RJ and Age labels and multirow spans retained",
+    "Section links resolved and text-heavy Table 4 wraps within the PDF text width"
   ],
   "unresolved": [
     "Corresponding author is not marked in the source",
     "DOI, volume, year and publication date require editorial assignment",
-    "Complex tables and cross-references require comparison with the supplied PDF"
+    "Author query: confirm learning-rate notation 3\\text{e--}5, which also appears in the accepted source"
   ],
   "body_rewritten": false
 }

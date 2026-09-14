@@ -2,20 +2,51 @@
   "R2.2025.001": {
     "kind": "canonical Quarto editorial",
     "source": "manuscripts/R2.2025.001/article.qmd",
-    "checks": ["multi-author metadata", "affiliations", "citations", "HTML/PDF/JATS rendering"],
-    "expected_release_issues": ["email"]
+    "checks": [
+      "multi-author metadata",
+      "affiliations",
+      "citations",
+      "HTML/PDF/JATS rendering"
+    ],
+    "expected_release_issues": [
+      "email"
+    ]
   },
   "Hussey": {
     "kind": "Word import needing editorial completion",
     "source": "manuscripts/Hussey/source/manuscript.docx",
-    "checks": ["Word citations", "EMF images", "tables", "missing metadata"],
-    "expected_release_issues": ["placeholder", "article-id", "doi", "email", "image"]
+    "checks": [
+      "Word narrative citations",
+      "DOIs and corporate authors",
+      "EMF+ bitmaps",
+      "table and equations",
+      "figure captions",
+      "incomplete publication metadata"
+    ],
+    "expected_release_issues": [
+      "required",
+      "placeholder",
+      "article-id"
+    ]
   },
   "Stylometry": {
     "kind": "accepted LaTeX project with reference PDF",
     "source": "manuscripts/Stylometry/source/accepted-source.zip",
     "main": "main.tex",
-    "checks": ["multiple source versions", "stale bibliography", "custom package", "figures", "equations", "complex tables", "footnotes"],
-    "expected_release_issues": ["required", "doi", "date", "corresponding"]
+    "checks": [
+      "multiple source versions",
+      "stale bibliography",
+      "custom package",
+      "figures",
+      "equations",
+      "complex tables",
+      "footnotes"
+    ],
+    "expected_release_issues": [
+      "required",
+      "doi",
+      "date",
+      "corresponding"
+    ]
   }
 }

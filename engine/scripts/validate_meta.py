@@ -139,6 +139,10 @@ def check(manuscript_dir: str | Path, mode="release", content=True) -> list[dict
         for cite in sorted(cites - set(keys) - ids):
             issue("citation", f"Unresolved citation or cross-reference: @{cite}")
         for node in nodes:
+            if node.get("t") in {"RawBlock", "RawInline"} and node.get("c", [None])[0] == "html":
+                html = node["c"][1]
+                if re.search(r"<(?:figure|embed)\b|data-cites=", html):
+                    issue("raw-figure", "HTML-only figure or citation markup can disappear from PDF/JATS; convert it to native Markdown", always=True)
             if node.get("t") == "Link":
                 target = node["c"][2][0]
                 if target.startswith("#") and unquote(target[1:]) not in ids:

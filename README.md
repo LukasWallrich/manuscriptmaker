@@ -28,8 +28,9 @@ output. **Approve & download** becomes available only for a complete, current
 proof with no publication blockers. Approval checks the source and output
 hashes and packages the exact files reviewed.
 
-This editor uses Quarto Markdown for the manuscript and YAML/BibTeX for
-metadata and references. The separate `docs/preview/` tool remains an
+The workspace provides visual prose editing, protected citation/equation tokens,
+authors and publication forms, and selection-anchored comments. Complex blocks
+retain their Quarto source; YAML/BibTeX tabs remain available for direct editing. The separate `docs/preview/` tool remains an
 approximate visual editor whose exports do not feed this pipeline. Use the
 local workspace for production copy-editing.
 
@@ -38,7 +39,7 @@ local workspace for production copy-editing.
 | Fixture | Coverage | Publication status |
 |---|---|---|
 | `R2.2025.001` | R2 inaugural editorial; many authors, affiliations and citations | Test only; several author emails are missing |
-| `Hussey` | Original Word manuscript; citations, tables and EMF graphics | Test only; imported metadata needs completion |
+| `Hussey` | Accepted Word manuscript; narrative citations, DOIs, tables, equations and EMF+ figures | Test only; keywords and publication fields need completion |
 | `Stylometry` | Accepted LaTeX project plus reference PDF; multiple versions, figures, equations, complex tables and footnotes | Test only; publication fields and corresponding author need assignment |
 
 The fixtures are recorded in `engine/fixtures.json` and cannot be published
@@ -46,9 +47,11 @@ by the publication command. Originals are preserved under each `source/`
 folder. The Stylometry fixture includes an extraction review with its source
 provenance and unresolved editorial questions.
 
-Word metafile conversion also needs `emf2svg-conv`, `wmf2svg` (for WMF) and
-`rsvg-convert`. On macOS, `brew install libemf2svg librsvg` covers the bundled
-EMF fixture. CI installs the corresponding Linux packages.
+Full-frame EMF+ bitmaps, including the Hussey figures, are recovered directly.
+Other Word metafiles need `emf2svg-conv`, `wmf2svg` (for WMF) and `rsvg-convert`.
+PDF figures and review page images need Poppler. On macOS, install
+`brew install libemf2svg librsvg poppler`; CI installs corresponding Linux packages.
+Blank raster conversions are rejected.
 
 ## Import and build from the command line
 
@@ -116,7 +119,9 @@ python3 review.py run --provider codex
 
 Use **Import review findings** to load the resulting `review.json`. The workspace
 shows evidence, proposed corrections, coverage, limitations and revision status.
-Suggestions are applied manually; build fresh proofs after editing. Findings do
+**Accept correction** applies a uniquely located exact replacement; **Reject finding**
+records an editorial decision. Queries and layout changes use manual editing.
+Build fresh proofs after editing. Findings do
 not override publication validation or approve a manuscript.
 
 See [the package README](engine/review/README.md) for all provider commands,
@@ -156,6 +161,8 @@ R2_INTEGRATION=1 .venv/bin/pytest -q -k release_pipeline
 ```
 
 See [the editing guide](docs/author-guide.md) for the workflow and
-[implementation notes](docs/copyediting.md) for remaining work. Journal design
+[implementation notes](docs/copyediting.md) for supported behavior and the deferred
+OJS staging check. [Live review evaluation](docs/review-evaluation.md) documents
+provider compatibility and conversion checks. Journal design
 lives in `_extensions/r2/` and `themes/r2/`; `_quarto.yml` selects the theme.
 Third-party XML schemas retain their own licence notices under `engine/schemas/`.

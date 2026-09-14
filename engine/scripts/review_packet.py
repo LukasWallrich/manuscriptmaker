@@ -28,8 +28,10 @@ Perform only the requested passes:
 1. import-fidelity: compare accepted originals with canonical/article.qmd. Check title,
 author order/names/affiliations, abstract, section order, missing/duplicated paragraphs,
 citations, numbers, equations, figures/captions, table cells/headers and footnotes.
-There is no frozen initial-import baseline. Differences may be intentional copy-edits:
-report them as warnings requiring editorial judgment, not automatic reversions.
+If baseline/article.qmd exists, compare originals to that frozen initial import,
+then use canonical/article.qmd to see whether the discrepancy remains. Differences
+between baseline and canonical are editorial changes, not conversion errors. Without
+a baseline, report differences as warnings: they may be intentional copy-edits.
 Archives can contain old drafts: respect source-selection notes; disclose ambiguity.
 2. proof-fidelity: compare proof-source/article.qmd with proofs, including PDF page
 layout if your tools can inspect it. Check missing content, tables, equations, references,
@@ -40,6 +42,10 @@ scientific meaning, numbers, citation keys, equations and Quarto markup. Separat
 objective errors (warning) from optional improvements (suggestion). No wholesale
 rewrites or research critique. Use a minimal exact replacement when possible; put
 uncertain changes as questions in explanation with suggested_correction null.
+
+For every pass, suggested_correction must be the exact replacement text for quote,
+never an instruction or a longer rewrite. Use null for queries, image/layout fixes
+or changes that need several edits. The editor may apply this field literally.
 
 For each issue, file/quote identify the affected passage. For fidelity issues also
 supply source_file/source_quote as comparative evidence; proofreading can use empty
@@ -53,14 +59,15 @@ limitations. Return no issues if none are supported, while still reporting cover
 
 
 def originals(mdir):
-    allowed = {'.docx', '.pdf', '.zip', '.tex', '.bib', '.png', '.jpg', '.jpeg', '.json', '.md'}
+    allowed = {'.docx', '.pdf', '.zip', '.tex', '.bib', '.png', '.jpg', '.jpeg', '.json', '.md', '.qmd', '.rmd', '.yml', '.svg', '.webp'}
     return [p for p in sorted((mdir / 'source').rglob('*')) if p.is_file()
             and not p.is_symlink() and p.suffix.lower() in allowed
+            and 'initial-import' not in p.relative_to(mdir / 'source').parts
             and not any(part.startswith('.') for part in p.relative_to(mdir / 'source').parts)]
 
 
 def original_hashes(mdir):
-    return {str(p.relative_to(mdir)): portable.digest(p) for p in originals(mdir)}
+    return {str(p.relative_to(mdir)): portable.digest(p) for p in originals(mdir) + [p for p in (mdir / 'source/initial-import').glob('*') if p.is_file()]}
 
 
 def packet(mdir):
@@ -105,7 +112,13 @@ def packet(mdir):
             limitations.append('Proofs predate current source/configuration. Review against proof-source; rebuild before final approval.')
     else:
         limitations.append('No production proofs available. Build proofs and export a new package for proof fidelity.')
-    limitations.append('No initial-import baseline: differences from accepted originals may be intentional editorial changes.')
+    baseline = mdir / 'source/initial-import'
+    if (baseline / 'article.qmd').exists():
+        for p in sorted(baseline.iterdir()):
+            if p.is_file():
+                copy(p, 'baseline/' + p.name)
+    else:
+        limitations.append('No initial-import baseline: differences from accepted originals may be intentional editorial changes.')
     # Searchable sidecars aid quotation checks; they do not replace visual inspection.
     for p in list(destination.rglob('*')):
         if p.suffix.lower() not in {'.pdf', '.docx'}:
@@ -154,7 +167,7 @@ def import_result(mdir, result):
         raise ValueError('Invalid review package ID')
     root = build.ROOT / '_build' / 'llm-review' / mdir.name / packet_id
     warnings = portable.validate(root, result)
-    report = {'result': result, 'evidence_warnings': warnings}
+    report = {'result': result, 'evidence_warnings': warnings, 'decisions': {}, 'working_revision': json.loads((root / 'packet.json').read_text())['revision']}
     reports = root / 'returned'
     reports.mkdir(exist_ok=True)
     (reports / (uuid.uuid4().hex + '.json')).write_text(json.dumps(report, indent=2))
@@ -168,11 +181,11 @@ def review_state(mdir):
     path = reports[-1]
     report = json.loads(path.read_text())
     packet_data = portable.verify(path.parent.parent)
-    current = packet_data['revision'] == build.fingerprint(mdir)[0] and packet_data['originals'] == original_hashes(mdir)
+    current = report.get('working_revision', packet_data['revision']) == build.fingerprint(mdir)[0] and packet_data['originals'] == original_hashes(mdir)
     proof = packet_data['proof']
     if proof:
         current = current and proof['hashes'] == build.file_hashes(build.ROOT / '_build' / mdir.name / proof['run'] / 'outputs')
-    report.update(current=current, packet_limitations=packet_data['limitations'])
+    report.update(current=current, report_id=path.stem, packet_limitations=packet_data['limitations'])
     return report
 
 

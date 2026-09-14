@@ -9,6 +9,7 @@ import re
 import subprocess
 import urllib.request
 import uuid
+import unicodedata
 
 PASSES = ['import-fidelity', 'proof-fidelity', 'proofreading']
 
@@ -96,8 +97,9 @@ def validate(root, result):
             except UnicodeError:
                 warnings.append('Visual evidence requires human verification: ' + name)
                 continue
-            normalize = lambda s: ' '.join(s.split())
-            if normalize(quote) not in normalize(content):
+            normalize = lambda s: ' '.join(unicodedata.normalize('NFKC', s).replace('\u00ad','').split())
+            versions = [content, re.sub(r'-[ \t]*\n[ \t]*', '-', content), re.sub(r'-[ \t]*\n[ \t]*', '', content)]
+            if not any(normalize(quote) in normalize(v) for v in versions):
                 raise ValueError('Quoted evidence is not present in ' + name)
     return sorted(set(warnings))
 
@@ -107,6 +109,11 @@ def parse_result(raw):
     value = json.loads(raw)
     if isinstance(value, dict) and 'structured_output' in value:
         value = value['structured_output']
+    elif isinstance(value, dict) and 'response' in value:
+        if not value['response']:
+            denied = ', '.join(a.get('display_name', a.get('action','unknown')) for a in value.get('denied_actions', []))
+            raise ValueError('Agent returned no review' + ('; denied tools: ' + denied if denied else ''))
+        value = value['response']
     elif isinstance(value, dict) and 'result' in value and isinstance(value['result'], str):
         value = value['result']
     if isinstance(value, str):
@@ -122,28 +129,51 @@ def command(provider, root, prompt, model, output):
     else:
         if not model or not re.search(r'Gemini (\d+\.\d+) Flash', model) or float(re.search(r'Gemini (\d+\.\d+) Flash', model)[1]) < 3.8:
             raise ValueError('Choose an explicit Gemini Flash model at 3.8 or above from agy models')
-        cmd = ['agy', '-p', prompt, '--sandbox', '--add-dir', str(root), '--print-timeout', '15m', '--json-schema', str(root / 'schema.json')]
+        cmd = ['agy', '-p', prompt, '--sandbox', '--add-dir', str(root), '--print-timeout', '15m', '--output-format', 'text']
     if model:
         cmd += ['--model', model]
     return cmd
 
 
-def openrouter_payload(root, packet, prompt, model, max_tokens):
+def openrouter_payload(root, packet, prompt, model, max_tokens, image_names=None):
     texts, images = {}, []
     for name in packet['evidence']:
         suffix = Path(name).suffix.lower()
         if suffix in {'.txt', '.qmd', '.md', '.bib', '.yml', '.json', '.tex', '.xml'}:
             texts[name] = (root / name).read_text()
-        elif suffix in {'.png', '.jpg', '.jpeg', '.webp'}:
+        elif suffix in {'.png', '.jpg', '.jpeg', '.webp'} and (image_names is None or name in image_names):
             mime = 'image/jpeg' if suffix in {'.jpg', '.jpeg'} else 'image/' + suffix[1:]
             images.extend([{'type': 'text', 'text': 'Evidence image: ' + name},
                            {'type': 'image_url', 'image_url': {'url': 'data:' + mime + ';base64,' + base64.b64encode((root / name).read_bytes()).decode()}}])
     content = [{'type': 'text', 'text': json.dumps({'packet': packet, 'evidence_text': texts})}] + images
     payload = {'model': model, 'max_tokens': max_tokens,
-        'messages': [{'role': 'system', 'content': prompt + '\nYou receive text and labeled images, including rendered PDF pages when available. Mark absent/unreadable files unread. Review PDF layout through page-images; do not claim to have opened binary archives or documents.'},
+        'messages': [{'role': 'system', 'content': prompt + '\nYou receive text and labeled images, including rendered PDF pages when available. Inspect supplied image pixels directly; no separate OCR tool is needed. Mark absent/unreadable files unread. Review PDF layout through page-images; do not claim to have opened binary archives or documents.'},
                      {'role': 'user', 'content': content}],
         'response_format': {'type': 'json_schema', 'json_schema': {'name': 'manuscript_review', 'strict': True, 'schema': SCHEMA}}}
     return json.dumps(payload).encode(), len(images) // 2
+
+
+def merge_reviews(reviews):
+    merged = dict(reviews[0])
+    merged['summary'] = ' '.join(dict.fromkeys(r['summary'] for r in reviews))
+    merged['limitations'] = list(dict.fromkeys(note for r in reviews for note in r['limitations']))
+    issues = {}
+    for r in reviews:
+        for issue in r['issues']:
+            key = tuple(issue[k] for k in ('pass','file','quote','source_file','source_quote','suggested_correction'))
+            issues.setdefault(key, issue)
+    merged['issues'] = list(issues.values())
+    ranks = {'unread':0,'partial':1,'checked':2}
+    coverage = {}
+    for r in reviews:
+        for item in r['coverage']:
+            old = coverage.get(item['file'])
+            if old is None or ranks[item['status']] > ranks[old['status']]:
+                coverage[item['file']] = dict(item)
+            elif item['status'] == old['status'] and item['notes'] not in old['notes']:
+                old['notes'] += ' ' + item['notes']
+    merged['coverage'] = list(coverage.values())
+    return merged
 
 
 def run(args, root):
@@ -155,24 +185,51 @@ def run(args, root):
     if args.provider == 'openrouter':
         if not args.model:
             raise ValueError('OpenRouter requires an explicit --model')
-        payload, image_count = openrouter_payload(root, packet, prompt, args.model, args.max_tokens)
-        print(f'OpenRouter request: {len(payload):,} bytes, {image_count} images; output limit {args.max_tokens} tokens. Check model pricing before running with --send.')
-        if len(payload) > args.max_request_mb * 1_000_000:
-            raise ValueError('Request exceeds --max-request-mb; nothing sent. Choose a suitable model and explicitly increase the limit, or review a smaller package.')
+        image_files = [n for n in packet['evidence'] if Path(n).suffix.lower() in {'.png','.jpg','.jpeg','.webp'}]
+        batch_size = getattr(args, 'batch_images', 8)
+        if batch_size < 1:
+            raise ValueError('--batch-images must be positive')
+        groups = [image_files[i:i+batch_size] for i in range(0,len(image_files),batch_size)] or [[]]
+        requests = []
+        for number, group in enumerate(groups, 1):
+            task = prompt + f'\nVisual batch {number}/{len(groups)}. Review only supplied images; mark other images unread in this batch. All text evidence is supplied as comparison context.'
+            payload, image_count = openrouter_payload(root, packet, task, args.model, args.max_tokens, group)
+            print(f'Batch {number}/{len(groups)}: {len(payload):,} bytes, {image_count} images; output limit {args.max_tokens} tokens.')
+            if len(payload) > args.max_request_mb * 1_000_000:
+                raise ValueError('A batch exceeds --max-request-mb; nothing sent. Reduce --batch-images or explicitly increase the byte limit for a suitable model.')
+            requests.append(payload)
         if not args.send:
-            print('Dry run only; no content sent. Add --send after checking cost and data policy.')
+            print(f'Dry run only: {len(requests)} requests planned; no content sent. Input text is repeated per batch. Check total input/image/output cost before adding --send.')
             return
         key = os.environ.get('OPENROUTER_API_KEY')
         if not key:
             raise ValueError('Set OPENROUTER_API_KEY in your environment')
-        request = urllib.request.Request('https://openrouter.ai/api/v1/chat/completions', data=payload,
-            headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'})
-        with urllib.request.urlopen(request, timeout=900) as response:
-            envelope = json.load(response)
-        raw = envelope['choices'][0]['message']['content']
-        (outdir / 'usage.json').write_text(json.dumps(envelope.get('usage', {}), indent=2))
+        responses = []
+        for number, payload in enumerate(requests, 1):
+            request = urllib.request.Request('https://openrouter.ai/api/v1/chat/completions', data=payload,
+                headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'})
+            with urllib.request.urlopen(request, timeout=900) as response:
+                envelope = json.load(response)
+            raw = envelope['choices'][0]['message']['content']
+            (outdir / f'batch-{number}-raw.txt').write_text(raw)
+            (outdir / f'batch-{number}-usage.json').write_text(json.dumps(envelope.get('usage', {}), indent=2))
+            answer = parse_result(raw)
+            validate(root, answer)
+            if set(answer['passes']) != set(args.passes):
+                raise ValueError('A batch omitted a requested review pass')
+            responses.append(answer)
+        raw = json.dumps(merge_reviews(responses))
     else:
         target = outdir / 'response.json'
+        if args.provider == 'agy':
+            inline = {}
+            for name in packet['evidence']:
+                if Path(name).suffix.lower() in {'.md','.qmd','.txt','.yml','.bib','.json','.tex','.xml'}:
+                    inline[name] = (root / name).read_text()
+            if sum(map(len, inline.values())) <= 250000:
+                prompt = 'Perform this self-contained text review without using any tools. The full instructions, schema, packet and evidence text follow. Mark binary/image files unread; this adapter uses text evidence only.\n' + prompt.replace('Read packet.json and schema.json first.', 'Use the embedded packet and schema.') + '\n' + json.dumps({'schema': SCHEMA, 'packet':packet,'text_evidence':inline})
+            else:
+                raise ValueError('agy inline text exceeds 250,000 characters; use Codex/Claude for file-based review or a smaller package')
         cmd = command(args.provider, root, prompt, args.model, target)
         result = subprocess.run(cmd, input=prompt if args.provider != 'agy' else None, cwd=root, text=True, capture_output=True, timeout=1200)
         (outdir / 'agent.log').write_text(result.stderr)
@@ -202,6 +259,7 @@ def main():
     r.add_argument('--model')
     r.add_argument('--passes', nargs='+', choices=PASSES, default=PASSES)
     r.add_argument('--max-tokens', type=int, default=12000)
+    r.add_argument('--batch-images', type=int, default=8, help='Maximum images per OpenRouter request')
     r.add_argument('--max-request-mb', type=int, default=32)
     r.add_argument('--send', action='store_true', help='Send the paid OpenRouter request; otherwise dry run')
     v = sub.add_parser('validate')
