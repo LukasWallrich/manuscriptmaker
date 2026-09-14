@@ -1,90 +1,127 @@
 # R2 Publishing Workflow
 
-A **GitHub-hosted, single-source publishing pipeline** for the Diamond Open
-Access journal *Replication Research (R2)* — and, via its theme system, for
-any journal that wants the same workflow.
+Copy-edit one canonical manuscript and generate the journal's HTML, PDF and
+JATS proofs from that saved source. A local browser workspace brings editing,
+production proofs and publication checks together. Approval freezes the
+reviewed files and downloads a publication package, including an OJS import.
 
-Drop an accepted manuscript into the repository, open a Pull Request, and
-GitHub Actions automatically produces, in the journal's exact design:
+## Start copy-editing
 
-- **HTML** — a self-contained web article (also usable as an OJS HTML galley)
-- **PDF** — typeset to the R2 LaTeX design
-- **JATS XML** — the archival, single-source publishing master
-- **OJS native-import package** — metadata + all galleys, ready to import into
-  [Open Journal Systems](https://pkp.sfu.ca/software/ojs/)
-
-It covers the workflow from *“manuscript accepted”* to *“published in the final
-journal design.”* Inspired by PhiMiSci's
-[Magic Manuscript Maker](https://github.com/phimisci/mmm-web-app-os), re-built
-for GitHub Pages + Actions so there is **no server to host or maintain**.
-
-## How it works
-
-```
- submit (.docx/.doc/.md/.rmd/.qmd/.tex/Overleaf .zip)
-        │
-        ▼  normalize.py  (Pandoc / LibreOffice)
- canonical source:  manuscripts/<id>/article.qmd + references.bib + figures/
-        │
-        ▼  quarto render   (one source → three outputs)
-   ┌────────────┬────────────┬───────────────┐
-   │  r2-html   │   r2-pdf   │    r2-jats     │
-   │  (Quarto + │ (pdflatex+ │ (Pandoc JATS + │
-   │   SCSS)    │ R2 .tex)   │  enrich_jats)  │
-   └────────────┴────────────┴───────────────┘
-        │
-        ▼  build_ojs.py
-   OJS native-import XML  (article + galleys, base64-embedded)
-```
-
-Everything that defines the **journal design** lives in a reusable Quarto
-extension (`_extensions/r2/`) parameterized by a per-journal config
-(`themes/<name>/theme.yml`). A new journal = a new theme folder; the engine is
-untouched.
-
-## Repository map
-
-| Path | What it is |
-|---|---|
-| `_extensions/r2/` | The engine: PDF `template.tex`, HTML `r2.scss` + masthead partial, bundled fonts/badges/CSL. |
-| `themes/r2/` | The journal's customization surface: `theme.yml` (colours, strings, OJS settings) + `assets/`. |
-| `manuscripts/<id>/` | One article: `article.qmd` (authored), `_metadata.yml` (editor registry), `references.bib`, `figures/`, `source/` (original upload). |
-| `engine/scripts/` | `normalize.py`, `validate_meta.py`, `enrich_jats.py`, `build_ojs.py`, `build_all.sh`, `r2meta.py`. |
-| `engine/templates/` | `ojs_native.xml.j2` (OJS package template). |
-| `.github/workflows/` | `build-manuscript.yml` (PR preview), `publish.yml` (on merge), `cleanup-preview.yml`. |
-| `docs/` | GitHub Pages landing page, author guide, and theme customizer. |
-
-## Quick start (local)
-
-Requires [Quarto ≥ 1.5](https://quarto.org), a LaTeX engine (TinyTeX is fine),
-and Python 3.10+ with `pyyaml` and `jinja2`.
+Requires Python 3.10+, Quarto 1.9.38 and TinyTeX. Install once:
 
 ```bash
-pip install pyyaml jinja2
-# Build the bundled sample end-to-end (skip PDF if you have no LaTeX):
-NO_PDF=1 engine/scripts/build_all.sh manuscripts/R2.2025.001
-# Or render a single format:
-quarto render manuscripts/R2.2025.001/article.qmd --to r2-html
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+quarto install tinytex
+bash engine/scripts/install_tex.sh
 ```
 
-Outputs land next to the source: `article.html`, `article.pdf`, `article.xml`,
-and `ojs/<id>_ojs_import.xml`.
+Then open the workspace:
 
-## Submitting a manuscript (research assistants)
+```bash
+.venv/bin/python engine/scripts/workspace.py
+```
 
-See **[docs/author-guide.md](docs/author-guide.md)**. In short: copy
-`manuscripts/_TEMPLATE/` to `manuscripts/<article-id>/`, drop the accepted file
-in `source/`, fill in `_metadata.yml`, and open a Pull Request. The bot replies
-with downloadable HTML/PDF/JATS/OJS galleys built from your PR (as workflow
-artifacts — no live preview URL, see the note in `build-manuscript.yml`).
+Choose a manuscript, edit its text or metadata, and select **Build proofs**.
+Edits autosave to the canonical source; the HTML/PDF pane displays production
+output. **Approve & download** becomes available only for a complete, current
+proof with no publication blockers. Approval checks the source and output
+hashes and packages the exact files reviewed.
 
-## Adapting this to another journal
+This editor uses Quarto Markdown for the manuscript and YAML/BibTeX for
+metadata and references. The separate `docs/preview/` tool remains an
+approximate visual editor whose exports do not feed this pipeline. Use the
+local workspace for production copy-editing.
 
-1. Copy `themes/r2/` to `themes/<your-journal>/` and edit `theme.yml`
-   (accent colour, journal name, license, OJS section, …) and `assets/`
-   (logo, license badge, open-science badges).
-2. Point `_quarto.yml`'s `metadata-files:` at your `theme.yml`.
-3. For a structurally different design, override `template.tex` / `r2.scss`
-   in `themes/<your-journal>/overrides/`.
+## Test manuscripts
 
-The conversion engine in `_extensions/r2/` does not change.
+| Fixture | Coverage | Publication status |
+|---|---|---|
+| `R2.2025.001` | R2 inaugural editorial; many authors, affiliations and citations | Test only; several author emails are missing |
+| `Hussey` | Original Word manuscript; citations, tables and EMF graphics | Test only; imported metadata needs completion |
+| `Stylometry` | Accepted LaTeX project plus reference PDF; multiple versions, figures, equations, complex tables and footnotes | Test only; publication fields and corresponding author need assignment |
+
+The fixtures are recorded in `engine/fixtures.json` and cannot be published
+by the publication command. Originals are preserved under each `source/`
+folder. The Stylometry fixture includes an extraction review with its source
+provenance and unresolved editorial questions.
+
+Word metafile conversion also needs `emf2svg-conv`, `wmf2svg` (for WMF) and
+`rsvg-convert`. On macOS, `brew install libemf2svg librsvg` covers the bundled
+EMF fixture. CI installs the corresponding Linux packages.
+
+## Import and build from the command line
+
+```bash
+# Initial import only; an existing article.qmd is always preserved.
+.venv/bin/python engine/scripts/normalize.py manuscripts/ARTICLE_ID
+
+# A reimport writes a separate proposal under .imports/ for comparison.
+.venv/bin/python engine/scripts/normalize.py manuscripts/Stylometry \
+  --source manuscripts/Stylometry/source/main.tex --reimport
+
+# Draft proofs, with visible publication issues:
+.venv/bin/python engine/scripts/build.py manuscripts/R2.2025.001
+# HTML/JATS only, when LaTeX is unavailable (cannot be approved):
+.venv/bin/python engine/scripts/build.py manuscripts/R2.2025.001 --no-pdf
+# Strict release validation:
+.venv/bin/python engine/scripts/build.py manuscripts/ARTICLE_ID --mode release
+```
+
+Each build gets a clean `_build/<id>/<run>/` directory containing:
+
+- `outputs/`: proof files and linked JATS assets; complete releases also
+  contain a JATS archive and the OJS import package.
+- `manifest.json`: source hashes, output hashes, Quarto version and readiness.
+- `issues.json` and `build.log`: publication issues and rendering diagnostics.
+- `project/`: the editable source and rendering engine snapshot.
+
+Builds never use stale galleys or overwrite edited source. Code execution is
+disabled during Quarto rendering; submit precomputed manuscript content.
+
+## Validation and approval
+
+Checks cover required metadata, placeholders, article IDs, author emails and
+resolved affiliations, ORCID checksums, publication dates, citation keys,
+internal links and local figures. JATS validates against the bundled NLM
+Journal Publishing 1.3 RELAX NG schema. OJS XML validates against the bundled
+OJS 3.3.0-15 native schema. The OJS JATS galley is a ZIP containing XML and
+its figures so dependent assets remain available. The OJS submission remains
+unpublished until an editor publishes it in OJS.
+
+Schema validity does not replace an import test in the target journal's
+staging OJS instance, or visual proofreading of complex tables and equations.
+Missing data is reported; author contact details are never fabricated.
+
+PRs build affected manuscripts and upload proofs, sources and diagnostics.
+Changes to shared code, themes or configuration select all fixtures. Publishing
+is an explicit **Approve and publish reviewed proofs** workflow action: an
+editor supplies the reviewed run and article ID. It verifies that the source
+still matches and copies those proof files without rerendering. Merge alone
+does not publish an article.
+
+## Optional LLM review
+
+```bash
+.venv/bin/python engine/scripts/review_packet.py manuscripts/Stylometry
+```
+
+This prepares a source-bound prompt and review packet under `_build/llm-review/`.
+Use them with a chosen LLM to check extraction fidelity against the originals
+and proofs. Suggestions must include source evidence and remain reviewable.
+The command makes no API calls, incurs no model charges and applies no edits.
+LLM findings cannot override validation or approve a manuscript.
+
+## Development
+
+```bash
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/pytest -q
+# Full rendering/approval test; also requires pdftotext (Poppler):
+R2_INTEGRATION=1 .venv/bin/pytest -q -k release_pipeline
+```
+
+See [the editing guide](docs/author-guide.md) for the workflow and
+[implementation notes](docs/copyediting.md) for remaining work. Journal design
+lives in `_extensions/r2/` and `themes/r2/`; `_quarto.yml` selects the theme.
+Third-party XML schemas retain their own licence notices under `engine/schemas/`.

@@ -42,3 +42,11 @@ _preview_local/
 # Office lock files
 ~$*
 **/~$*
+
+# Reimport proposals and local proof workspace state
+manuscripts/**/.imports/
+manuscripts/**/*.saving
+# The original Stylometry archive and reference PDF are the tracked originals.
+manuscripts/Stylometry/source/*
+!manuscripts/Stylometry/source/accepted-source.zip
+!manuscripts/Stylometry/source/accepted-proof.pdf

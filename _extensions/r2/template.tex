@@ -101,6 +101,8 @@
 \usepackage{calc}
 \usepackage{booktabs}
 \usepackage{longtable}
+\usepackage{multirow}
+\newcounter{none} % Pandoc uses this counter for uncaptioned tables.
 \usepackage{array}
 \usepackage{setspace}
 \usepackage{listings}
@@ -320,7 +322,7 @@ $endif$
   \end{tikzpicture}%
 }
 
-\newgeometry{top=30mm, bottom=20mm}
+\newgeometry{top=30mm, bottom=20mm, headheight=20pt, headsep=12pt}
 \pagestyle{mainstyle}
 \thispagestyle{mainstyle}
 

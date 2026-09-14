@@ -13,9 +13,13 @@ Usage:
 """
 from __future__ import annotations
 
+import argparse
+import json
 import sys
 from pathlib import Path
 from xml.dom import minidom
+
+from lxml import etree
 
 import r2meta
 
@@ -36,7 +40,7 @@ def _first(parent, tag):
     return nodes[0] if nodes else None
 
 
-def enrich(xml_path: Path, manuscript_dir: Path) -> None:
+def enrich(xml_path: Path, manuscript_dir: Path, *, draft=False, issues_path=None) -> None:
     meta = r2meta.load(manuscript_dir)
     r2 = meta.get("r2", {})
     doc = minidom.parse(str(xml_path))
@@ -52,6 +56,16 @@ def enrich(xml_path: Path, manuscript_dir: Path) -> None:
     front = _first(doc, "front")
     article_meta = _first(doc, "article-meta")
     journal_meta = _first(doc, "journal-meta")
+
+    if front is None or article_meta is None:
+        raise ValueError("JATS output must contain front/article-meta")
+    if journal_meta is None:
+        journal_meta = doc.createElement("journal-meta")
+        front.insertBefore(journal_meta, article_meta)
+    article.setAttribute("dtd-version", "1.3")
+    article.setAttribute("xmlns:xlink", "http://www.w3.org/1999/xlink")
+    if doc.doctype:
+        doc.removeChild(doc.doctype)
 
     # --- journal-meta: journal title, publisher, issn -----------------
     if journal_meta is not None:
@@ -69,6 +83,10 @@ def enrich(xml_path: Path, manuscript_dir: Path) -> None:
     if article_meta is None:
         doc.writexml(open(xml_path, "w", encoding="utf-8"))
         return
+
+    if not journal_meta.getElementsByTagName("journal-id"):
+        journal_meta.insertBefore(_text_el(doc, "journal-id", meta.get("ojs", {}).get("journal-path", "journal"),
+                                           **{"journal-id-type": "publisher-id"}), journal_meta.firstChild)
 
     # --- DOI as <article-id pub-id-type="doi"> ------------------------
     if r2.get("doi"):
@@ -124,7 +142,11 @@ def enrich(xml_path: Path, manuscript_dir: Path) -> None:
             article_meta.insertBefore(lay, kw) if kw else article_meta.appendChild(lay)
 
     # --- custom-meta-group: badges + recommended citation -------------
-    cmg = doc.createElement("custom-meta-group")
+    for existing in list(article_meta.getElementsByTagName("custom-meta")):
+        name = _first(existing, "meta-name")
+        if name is not None and name.firstChild and name.firstChild.nodeValue in {"open-science-badges", "recommended-citation"}:
+            existing.parentNode.removeChild(existing)
+    cmg = _first(article_meta, "custom-meta-group") or doc.createElement("custom-meta-group")
 
     def _cmeta(name, value):
         cm = doc.createElement("custom-meta")
@@ -141,15 +163,57 @@ def enrich(xml_path: Path, manuscript_dir: Path) -> None:
     if cmg.hasChildNodes():
         article_meta.appendChild(cmg)
 
-    with open(xml_path, "w", encoding="utf-8") as fh:
-        doc.writexml(fh)
+    for empty_tag in ("author-notes", "custom-meta-group", "history"):
+        for node in list(article_meta.getElementsByTagName(empty_tag)):
+            if not any(n.nodeType == n.ELEMENT_NODE for n in node.childNodes):
+                node.parentNode.removeChild(node)
+    # Scalar Quarto abstracts can arrive as raw text; Publishing requires
+    # paragraph/block content while preserving any inline emphasis/citations.
+    for abstract in article_meta.getElementsByTagName("abstract"):
+        blocks = {"title", "p", "sec", "list", "def-list", "fig", "table-wrap", "boxed-text"}
+        group = []
+        for node in list(abstract.childNodes) + [None]:
+            if node is None or (node.nodeType == node.ELEMENT_NODE and node.tagName in blocks):
+                if any(n.nodeType == n.ELEMENT_NODE or (n.nodeValue or "").strip() for n in group):
+                    para = doc.createElement("p")
+                    abstract.insertBefore(para, group[0])
+                    for child in group:
+                        para.appendChild(child)
+                group = []
+            else:
+                group.append(node)
+    # JATS Publishing requires metadata in schema order.
+    order = "article-id article-version article-version-alternatives article-categories title-group contrib-group aff aff-alternatives x author-notes pub-date pub-date-not-available volume volume-id volume-series issue issue-id issue-title issue-title-group issue-sponsor issue-part supplement fpage lpage page-range elocation-id email ext-link uri product supplementary-material history pub-history permissions self-uri related-article related-object abstract trans-abstract kwd-group funding-group support-group conference counts custom-meta-group".split()
+    rank = {tag: i for i, tag in enumerate(order)}
+    children = [n for n in article_meta.childNodes if n.nodeType == n.ELEMENT_NODE]
+    for node in sorted(children, key=lambda n: rank.get(n.tagName, len(rank))):
+        article_meta.appendChild(node)
+    data = doc.toxml(encoding="utf-8")
+    parser = etree.XMLParser(resolve_entities=False, no_network=True)
+    tree = etree.fromstring(data, parser)
+    schema = etree.RelaxNG(etree.parse(str(Path(__file__).resolve().parents[1] /
+                                         "schemas/jats-1.3/JATS-journalpublishing1-3.rng")))
+    issues = []
+    try:
+        schema.assertValid(tree)
+    except etree.DocumentInvalid as e:
+        if not draft:
+            raise
+        issues = [dict(code="jats-schema", severity="error", file="article.xml", message=str(entry.message))
+                  for entry in e.error_log]
+    if issues_path:
+        Path(issues_path).write_text(json.dumps(issues, indent=2))
+    xml_path.write_bytes(b'<?xml version="1.0" encoding="utf-8"?>\n' + etree.tostring(tree, method="c14n"))
     print(f"Enriched JATS: {xml_path}")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("usage: enrich_jats.py <article.xml> [manuscript-dir]", file=sys.stderr)
-        sys.exit(2)
-    xml = Path(sys.argv[1])
-    mdir = Path(sys.argv[2]) if len(sys.argv) > 2 else xml.parent
-    enrich(xml, mdir)
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("xml_path")
+    ap.add_argument("manuscript_dir", nargs="?")
+    ap.add_argument("--draft", action="store_true")
+    ap.add_argument("--issues")
+    args = ap.parse_args()
+    xml = Path(args.xml_path)
+    enrich(xml, Path(args.manuscript_dir) if args.manuscript_dir else xml.parent,
+           draft=args.draft, issues_path=args.issues)

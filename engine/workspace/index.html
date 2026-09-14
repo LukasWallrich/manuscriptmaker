@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>R2 Copy-editing</title>
+<style>
+@font-face{font-family:Carlito;src:url('/Carlito-Regular.ttf')}
+:root{--accent:#007d9e;--ink:#20343b;--paper:#fff;--wash:#edf5f7;--rule:#bccfd4;--error:#9c3221}
+*{box-sizing:border-box}body{margin:0;background:var(--wash);color:var(--ink);font:18px/1.45 Carlito,Calibri,sans-serif}
+header{display:flex;align-items:center;gap:24px;padding:18px 28px;background:var(--paper);border-bottom:4px solid var(--accent)}
+header img{width:110px}h1{font-size:28px;margin:0}header p{margin:0;color:#536a71}main{padding:20px 28px}button,select{font:inherit;border:1px solid var(--rule);border-radius:5px;background:white;color:var(--ink);padding:8px 14px;cursor:pointer}button.primary{background:var(--accent);color:white;border-color:var(--accent)}button:disabled{opacity:.5;cursor:default}button:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:3px solid #008baa;outline-offset:2px}.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}.toolbar label{display:flex;align-items:center;gap:8px}.toolbar .spacer{flex:1}#status{min-height:26px;margin:8px 0 14px}#status.error{color:var(--error)}.spread{display:grid;grid-template-columns:minmax(300px,1fr) minmax(350px,1.1fr);gap:20px}.pane{background:white;border:1px solid var(--rule);border-radius:6px;overflow:hidden}.pane-head{display:flex;align-items:center;gap:8px;padding:12px;border-bottom:1px solid var(--rule)}h2{font-size:21px;margin:0 auto 0 0}.tabs{display:flex;gap:6px}.tabs button{font-size:16px;padding:6px 10px}.tabs button[aria-pressed=true]{background:var(--wash);border-color:var(--accent)}textarea{width:100%;height:60vh;min-height:360px;border:0;padding:22px;resize:vertical;font:16px/1.65 ui-monospace,monospace;color:var(--ink);background:white}iframe{width:100%;height:60vh;min-height:360px;border:0;background:white}#empty{padding:36px;max-width:55ch}#proof-note{padding:8px 14px;margin:0;border-bottom:1px solid var(--rule);font-size:16px}details{margin-top:18px;background:white;border:1px solid var(--rule);padding:14px 18px;border-radius:6px}summary{cursor:pointer;font-size:20px}#issues{max-height:250px;overflow:auto}#issues li{margin:8px 0}a{color:var(--accent)}.hint{font-size:15px;margin:8px 0;color:#536a71}#download{display:none}@media(max-width:850px){header,main{padding:16px}.spread{grid-template-columns:1fr}.toolbar .spacer{display:none}header img{width:80px}.pane-head{flex-wrap:wrap}textarea,iframe{height:50vh}}
+</style>
+<header><img src="/logo.png" alt="Replication Research"><div><h1>Copy-editing</h1><p>Edit the manuscript. Review its proofs. Approve one publication package.</p></div></header>
+<main>
+<div class="toolbar"><label>Manuscript <select id="article" aria-label="Manuscript"></select></label><span class="spacer"></span><button id="save">Save changes</button><button id="build" class="primary">Build proofs</button><button id="approve" disabled>Approve & download</button><a id="download">Download approved package</a></div>
+<p id="status" role="status" aria-live="polite">Loading manuscripts…</p>
+<div class="spread">
+<section class="pane"><div class="pane-head"><h2>Editable source</h2><div class="tabs" id="edit-tabs"><button data-file="article.qmd" aria-pressed="true">Manuscript</button><button data-file="front-matter" aria-pressed="false">Article details</button><button data-file="_metadata.yml" aria-pressed="false">Publication fields</button><button data-file="references.bib" aria-pressed="false">References</button></div></div><textarea id="editor" aria-label="Manuscript source" spellcheck="false"></textarea></section>
+<section class="pane"><div class="pane-head"><h2>Production proof</h2><div class="tabs"><button id="html" aria-pressed="true">HTML</button><button id="pdf" aria-pressed="false">PDF</button></div></div><p id="proof-note">No proof built yet.</p><div id="empty">Build proofs to see the journal's production output here. Changes in the editor are saved to the manuscript used for every format.</div><iframe id="proof" title="Production proof" sandbox="allow-scripts" hidden></iframe></section>
+</div>
+<p class="hint">The manuscript uses Quarto Markdown; citations keep their reference keys. Changes autosave after you pause typing. Proofs update when you choose Build proofs.</p>
+<details open><summary id="issue-title">Publication checks</summary><ul id="issues"></ul><a id="log" hidden target="_blank">Open build log</a></details>
+</main>
+<script>
+const token='__TOKEN__';
+const $=s=>document.querySelector(s);
+let article='', files={}, frontMatter='', manuscriptBody='', editRevision='', activeFile='article.qmd', dirty=false, proof=null, format='html', timer, saving=null, busy=false, generation=0;
+function status(message,error=false){$('#status').textContent=message;$('#status').className=error?'error':''}
+async function api(path,data){const r=await fetch(path,data?{method:'POST',headers:{'Content-Type':'application/json','X-Workspace-Token':token},body:JSON.stringify(data)}:{});const body=await r.json();if(!r.ok)throw Error(body.error);return body}
+function sourceParts(){const text=files['article.qmd']||'';const match=text.match(/^(---\s*\n[\s\S]*?\n---\s*\n)([\s\S]*)$/);return match?{head:match[1],body:match[2]}:{head:'',body:text}}
+function editorText(){return activeFile==='article.qmd'?manuscriptBody:activeFile==='front-matter'?frontMatter:(files[activeFile]||'')}
+function storeEditor(){if(activeFile==='article.qmd')manuscriptBody=$('#editor').value;else if(activeFile==='front-matter')frontMatter=$('#editor').value;else files[activeFile]=$('#editor').value;files['article.qmd']=frontMatter+(frontMatter&&!frontMatter.endsWith('\n')?'\n':'')+manuscriptBody}
+function markStale(){ $('#approve').disabled=true;$('#download').style.display='none';if(proof)$('#proof-note').textContent='Source changed. Build a new proof before approval.' }
+async function save(){clearTimeout(timer);if(saving)await saving;if(!dirty)return;const version=generation;const payload={...files};saving=(async()=>{const r=await api('/api/save',{article,files:payload,edit_revision:editRevision});editRevision=r.edit_revision;if(generation===version)dirty=false;status(dirty?'Saving latest edits…':'Changes saved.');})();try{await saving}finally{saving=null}if(dirty)timer=setTimeout(()=>save().catch(e=>status(e.message,true)),700)}
+function updateProof(p,job){proof=p;busy=job==='building';$('#build').disabled=busy;$('#build').textContent=busy?'Building proofs…':'Build proofs';$('#approve').disabled=dirty||busy||!p||!p.current||!p.release_ready;
+ const list=$('#issues');list.replaceChildren();
+ for(const issue of p?.issues||[]){const li=document.createElement('li');li.textContent=issue.file+': '+issue.message;list.append(li)}
+ $('#issue-title').textContent=p?`Publication checks (${p.issues.length} issue${p.issues.length===1?'':'s'})`:'Publication checks';
+ if(!p)return; const base=`/proof/${encodeURIComponent(article)}/${p.run}`;$('#log').href=base+'/build.log';$('#log').hidden=false;
+ $('#proof-note').textContent=busy?'Building a fresh proof…':!p.current?'This proof is out of date. Build a new proof.':p.state==='failed'?'Build failed. Check the issues and build log.':p.release_ready?'Current proof. Ready for final review and approval.':'Current draft proof. Resolve publication issues before approval.';
+ if(p.outputs?.['article.'+format]){const url=base+'/outputs/article.'+format;if($('#proof').getAttribute('src')!==url)$('#proof').src=url;$('#proof').hidden=false;$('#empty').hidden=true}else{$('#proof').hidden=true;$('#empty').hidden=false;$('#empty').textContent=format==='pdf'?'No PDF is available for this build.':'The proof will appear when the build finishes.'}
+}
+async function load(name){await save();article=name;$('#article').value=name;const r=await api('/api/manuscript/'+encodeURIComponent(name));files=r.files;const parts=sourceParts();frontMatter=parts.head;manuscriptBody=parts.body;editRevision=r.edit_revision;dirty=false;$('#editor').value=editorText();$('#download').style.display='none';updateProof(r.proof,r.job);status('Ready to edit.');}
+$('#editor').addEventListener('input',()=>{storeEditor();dirty=true;generation++;markStale();status('Unsaved changes…');clearTimeout(timer);timer=setTimeout(()=>save().catch(e=>status(e.message,true)),700)});
+$('#edit-tabs').addEventListener('click',e=>{if(!e.target.dataset.file)return;activeFile=e.target.dataset.file;$('#editor').value=editorText()||'';$('#editor').setAttribute('aria-label',e.target.textContent);document.querySelectorAll('[data-file]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.file===activeFile))});
+$('#article').onchange=()=>load($('#article').value).catch(e=>{$('#article').value=article;status(e.message,true)});
+$('#save').onclick=()=>save().catch(e=>status(e.message,true));
+$('#build').onclick=async()=>{try{await save();await api('/api/build',{article});busy=true;$('#build').disabled=true;$('#approve').disabled=true;status('Building HTML, PDF and JATS from the saved manuscript…')}catch(e){status(e.message,true)}};
+$('#approve').onclick=async()=>{try{await save();const r=await api('/api/approve',{article,run:proof.run});$('#download').href=r.download;$('#download').style.display='inline';$('#download').click();status('Approved. The package contains the exact proof files you reviewed.')}catch(e){status(e.message,true)}};
+for(const kind of ['html','pdf'])$('#'+kind).onclick=()=>{format=kind;$('#html').setAttribute('aria-pressed',kind==='html');$('#pdf').setAttribute('aria-pressed',kind==='pdf');updateProof(proof,busy?'building':null)};
+window.addEventListener('beforeunload',e=>{if(dirty||saving){e.preventDefault();e.returnValue=''}});
+setInterval(async()=>{if(!article||dirty||saving)return;try{const r=await api('/api/manuscript/'+encodeURIComponent(article));if(r.edit_revision!==editRevision){markStale();status('Files changed outside this window. Reload to read those changes.',true);return}const wasBusy=busy;updateProof(r.proof,r.job);if(wasBusy&&!busy)status(r.proof?.state==='built'?'Proofs built. Review the output and publication checks.':'Build failed. Open the build log for details.',r.proof?.state!=='built')}catch(e){status(e.message,true)}},2500);
+(async()=>{const names=await api('/api/manuscripts');for(const name of names){const o=document.createElement('option');o.value=o.textContent=name;$('#article').append(o)}if(names.length)await load(names.includes('R2.2025.001')?'R2.2025.001':names[0]);else status('Add a manuscript folder to get started.');})().catch(e=>status(e.message,true));
+</script>
+</html>

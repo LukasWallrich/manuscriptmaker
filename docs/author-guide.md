@@ -1,78 +1,59 @@
-# Author / Research-Assistant Guide
+# Copy-editing guide
 
-This guide takes one accepted manuscript from *“accepted”* to *“published in the
-R2 design.”* No software needs to run on your machine — GitHub does the work.
+Use the local workspace to edit a manuscript once and inspect the production
+proofs generated from it. Start it using the setup commands in the repository
+README. The static browser preview is useful for a quick look; edits made
+there do not update the production manuscript.
 
-> **Tip — instant preview.** Before submitting, drop your file into the
-> [in-browser preview](preview/) to see it typeset in the R2 design immediately
-> (`.docx`, Markdown/Quarto, and basic LaTeX). It runs entirely in your browser;
-> the authoritative PDF/JATS/OJS galleys are still produced by the pipeline below.
+## Prepare the accepted manuscript
 
-## 1. Create the manuscript folder
+Copy `manuscripts/_TEMPLATE/` into a new article folder. Preserve the accepted
+file in `source/`. If importing Word or LaTeX, delete the template's
+`article.qmd`, then run `normalize.py` once. Word citations need live reference
+manager fields; otherwise supply a bibliography. For a LaTeX project with
+several main files, explicitly select the accepted version with `--source`.
 
-1. On GitHub, click **Add file → Create new file** (or use the web editor).
-2. Copy the folder `manuscripts/_TEMPLATE/` to `manuscripts/<article-id>/`,
-   where `<article-id>` is the assigned id, e.g. `R2.2025.014`.
+Check the imported content against the original, particularly tables,
+figures, equations and references. Complete article details and publication
+fields from verified records. The folder name must match `r2.article-id`.
+An existing canonical article is never replaced during a build. Use
+`--reimport` to create a separate import proposal if the original changes.
 
-The folder should contain:
+## Edit and review
 
-```
-manuscripts/R2.2025.014/
-  source/      ← put the accepted file here (.docx/.doc/.md/.rmd/.qmd/.tex/.zip)
-  _metadata.yml ← publication fields (DOI, volume, type, discipline, badges…)
-```
+1. Open the workspace and choose the article.
+2. Edit manuscript text, article details, publication fields or references.
+   Changes autosave after a pause in typing. Keep `[@citation-key]` citations,
+   figure paths and identifiers intact.
+3. Select **Build proofs**. Review the actual HTML and PDF and resolve the
+   listed publication issues. Rebuild after edits; the workspace marks old
+   proofs as out of date.
+4. When the proof is complete and current, select **Approve & download**.
+   The package contains those exact files, without another rendering pass.
 
-## 2. Add the manuscript file
+Autosave refuses to overwrite files changed by another editor or application.
+Reload the page to read external edits before continuing. Keep the workspace
+local: it binds to localhost and is not a multi-user hosted service.
 
-Upload the accepted file into `source/`. Accepted inputs:
+## Handoff and publication
 
-| Format | Notes |
+The package contains HTML, PDF, JATS XML with its figures, a JATS ZIP and an
+OJS native import file. OJS receives PDF, HTML and a JATS archive galley in an unpublished production submission.
+Before the first production import, verify journal-specific section, author
+user-group, uploader and genre settings in a staging OJS instance.
+
+For GitHub Pages publication, merge the reviewed source and choose the
+**Approve and publish reviewed proofs** workflow on `main`, supplying the
+article ID and reviewed proof-build run ID. It refuses changed sources,
+incomplete bundles and test fixtures. Merge itself does not publish.
+
+## Common issues
+
+| Issue | Action |
 |---|---|
-| `.docx` / `.doc` | Citations are extracted **only** if they use live Zotero/Mendeley/Word field codes. Otherwise also add a `references.bib`. |
-| `.qmd` / `.md` / `.rmd` | Used directly. R Markdown should be pre-rendered (`_freeze/`); CI does not run R/Python. |
-| `.tex` | A single main LaTeX file. R2 macros (`\RtwoAbstract`, `\keywords`, `\recommendedcitation`) are detected. |
-| `.zip` | An Overleaf project export containing the main `.tex`. |
-
-## 3. Fill in `_metadata.yml`
-
-Set `article-id` (must match the folder name), `doi`, `volume`, `year`,
-`article-type`, `discipline`, the lay summary, the recommended citation, and
-flip any earned open-science `badges` to `true`. These fields drive the title
-page, the JATS, and the OJS package.
-
-> Author names, affiliations, ORCIDs, abstract, and keywords come from the
-> manuscript's front matter (or, for `.docx`, are filled into the generated
-> `article.qmd` — check the TODO markers the bot points out).
-
-## 4. Open a Pull Request
-
-Commit on a new branch and open a PR. Within a few minutes the **R2 bot**
-comments with a link to the workflow run's **Artifacts**, containing:
-
-- 🌐 the built **HTML**, 📕 the **PDF**, 🗂️ the **JATS XML**, and 📦 the
-  **OJS import package**.
-
-(There's no live preview URL — download the HTML artifact and open it locally,
-or use the [instant preview tool](preview/) for a quick look before submitting.)
-Push more commits to rebuild. The PR is also where **typesetting / proofreading**
-happens: reviewers download the HTML/PDF, comment inline on the PR, the RA
-pushes fixes, the artifacts update.
-
-## 5. Publish
-
-When the PR is approved and merged into `main`:
-
-- the article is deployed to `…/articles/<article-id>/`, and
-- the **OJS native-import package** is produced as a build artifact.
-
-An editor imports that package into OJS via **Tools → Import/Export → Native XML
-Plugin**, creating the article with its PDF, HTML, and JATS galleys.
-
-## Troubleshooting
-
-| The bot says… | Do this |
-|---|---|
-| `Missing required field: …` | Fill that field in `_metadata.yml` (or the `.qmd` front matter). |
-| `No bibliography detected` | Add `references.bib` to the manuscript folder, or fix the Word citations to use a reference manager. |
-| `article.qmd uses a TODO skeleton` | Word metadata couldn't be auto-detected — open the generated `article.qmd` and replace the `TODO:` placeholders. |
-| PDF looks wrong but HTML is fine | Check the build log artifact; LaTeX errors are reported there. |
+| TODO or missing metadata | Replace it with verified publication details. |
+| Unresolved citation | Correct its key or add the reference to the bibliography. |
+| Missing or unsupported figure | Supply the file or install the metafile converters. |
+| Missing author email | Obtain the author's email for the OJS export. |
+| Failed PDF/JATS | Read the retained build log; correct the reported source or template issue. |
+| Proof out of date | Build and review a new proof before approval. |

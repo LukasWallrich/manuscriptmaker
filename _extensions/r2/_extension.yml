@@ -36,6 +36,7 @@ contributes:
       # Open Science Badges block); Pandoc(doc) early-returns for
       # non-HTML formats, so this doesn't touch PDF's own final block.
       filters:
+        - filters/table-ids.lua
         - filters/r2-final.lua
 
     # ---------------------------------------------------------------
@@ -49,6 +50,7 @@ contributes:
       css:
         - html/r2-extra.css
       filters:
+        - filters/table-ids.lua
         - filters/r2-final.lua
       embed-resources: true
       toc: true
@@ -64,6 +66,8 @@ contributes:
     # JATS – archival "publishing" tag set + R2 front-matter template.
     # ---------------------------------------------------------------
     jats:
+      filters:
+        - filters/table-ids.lua
       to: jats_publishing
       csl: resources/apa.csl
       # R2-specific front matter (DOI, article categories, lay summary,

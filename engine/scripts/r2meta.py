@@ -92,9 +92,17 @@ def _resolve_authors(meta: dict) -> list[dict]:
 def load(manuscript_dir: str | os.PathLike, theme: Path | None = None) -> dict:
     """Load fully merged + normalized metadata for one manuscript folder."""
     mdir = Path(manuscript_dir).resolve()
-    theme_path = Path(theme) if theme else DEFAULT_THEME
-
-    theme_meta = yaml.safe_load(theme_path.read_text(encoding="utf-8")) or {}
+    if theme:
+        theme_paths = [Path(theme)]
+    else:
+        config = yaml.safe_load((REPO_ROOT / "_quarto.yml").read_text()) or {}
+        paths = config.get("metadata-files", [])
+        if isinstance(paths, str):
+            paths = [paths]
+        theme_paths = [REPO_ROOT / path for path in paths] or [DEFAULT_THEME]
+    theme_meta = {}
+    for path in theme_paths:
+        theme_meta = _deep_merge(theme_meta, yaml.safe_load(path.read_text(encoding="utf-8")) or {})
 
     meta_file = mdir / "_metadata.yml"
     meta_meta = yaml.safe_load(meta_file.read_text(encoding="utf-8")) if meta_file.exists() else {}

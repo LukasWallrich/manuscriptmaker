@@ -1,0 +1,18 @@
+{
+  "source": "source/accepted-source.zip:main.tex",
+  "reference_pdf": "source/accepted-proof.pdf",
+  "review_method": "Codex-assisted extraction checked against explicit LaTeX source",
+  "verified": [
+    "Three author names, emails and affiliation names transcribed from the author block",
+    "Title, abstract and keywords imported from main.tex",
+    "Bibliography selected from the declared references file, excluding references_stale.bib",
+    "Author-supplied PNG counterparts used for the two PDF figures",
+    "Booktabs table-rule commands excluded from text; RJ and Age labels and multirow spans retained"
+  ],
+  "unresolved": [
+    "Corresponding author is not marked in the source",
+    "DOI, volume, year and publication date require editorial assignment",
+    "Complex tables and cross-references require comparison with the supplied PDF"
+  ],
+  "body_rewritten": false
+}

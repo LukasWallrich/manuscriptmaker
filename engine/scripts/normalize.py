@@ -15,11 +15,17 @@ Usage:
 """
 from __future__ import annotations
 
+import argparse
+import datetime
+import os
+import signal
 import re
 import shutil
 import subprocess
 import sys
 import zipfile
+
+import yaml
 from pathlib import Path
 
 PANDOC = ["quarto", "pandoc"]  # Pandoc shipped with Quarto; no separate install
@@ -47,16 +53,26 @@ bibliography: references.bib
 """
 
 
-def run(cmd: list[str], cwd: Path | None = None) -> None:
-    print("  $", " ".join(str(c) for c in cmd))
-    subprocess.run(cmd, cwd=cwd, check=True)
+def run(cmd: list[str], cwd: Path | None = None, input_text=None) -> None:
+    print("  $", " ".join(str(c) for c in cmd), flush=True)
+    proc = subprocess.Popen(cmd, cwd=cwd, text=True, start_new_session=True,
+                            stdin=subprocess.PIPE if input_text is not None else None)
+    try:
+        proc.communicate(input_text, timeout=90)
+    except subprocess.TimeoutExpired:
+        os.killpg(proc.pid, signal.SIGKILL)
+        proc.wait()
+        raise SystemExit("Import exceeded 90 seconds; inspect the source for unsupported macros")
+    if proc.returncode:
+        raise subprocess.CalledProcessError(proc.returncode, cmd)
 
 
 def _is_real_source(p: Path) -> bool:
     """A candidate source file — skips Office lock files (~$foo.docx)."""
     return (p.is_file()
             and p.suffix.lower() in SUPPORTED - {".zip"}
-            and not p.name.startswith("~$"))
+            and not p.name.startswith("~$")
+            and p.name != "PUT_MANUSCRIPT_HERE.md")
 
 
 def _candidates_in(search: Path) -> list[Path]:
@@ -64,30 +80,29 @@ def _candidates_in(search: Path) -> list[Path]:
     for z in sorted(search.glob("*.zip")):
         print(f"  unzipping {z.name}")
         with zipfile.ZipFile(z) as zf:
+            for info in zf.infolist():
+                target = (search / info.filename).resolve()
+                if not target.is_relative_to(search.resolve()):
+                    raise SystemExit(f"Archive member escapes source directory: {info.filename}")
+                if (info.external_attr >> 16) & 0o170000 == 0o120000:
+                    raise SystemExit("Archive symlinks are not supported")
             zf.extractall(search)
     return [p for p in search.rglob("*") if _is_real_source(p)]
 
 
 def find_source(mdir: Path) -> Path:
     src_dir = mdir / "source"
-    # Prefer a real upload in source/; fall back to a canonical article.qmd
-    # already sitting in the manuscript folder (idempotent re-runs).
     candidates = _candidates_in(src_dir) if src_dir.is_dir() else []
     if not candidates:
-        candidates = [p for p in mdir.glob("*") if _is_real_source(p)]
-    if not candidates:
-        raise SystemExit(f"No supported source file found in {src_dir} or {mdir}")
-    # Prefer an explicit main file; else the largest .tex/.docx/.md.
-    for pref in ("main.tex", "manuscript.tex", "article.tex"):
-        for c in candidates:
-            if c.name.lower() == pref:
-                return c
-    # For LaTeX, pick the file that has \begin{document}; else largest.
-    texs = [c for c in candidates if c.suffix.lower() == ".tex"]
-    for t in texs:
-        if "\\begin{document}" in t.read_text(encoding="utf-8", errors="ignore"):
-            return t
-    return max(candidates, key=lambda p: p.stat().st_size)
+        raise SystemExit(f"No supported upload found in {src_dir}")
+    if len(candidates) == 1:
+        return candidates[0]
+    mains = [p for p in candidates if p.suffix.lower() == ".tex"
+             and "\\begin{document}" in p.read_text(encoding="utf-8", errors="ignore")]
+    if len(mains) == 1:
+        return mains[0]
+    names = ", ".join(str(p.relative_to(src_dir)) for p in candidates)
+    raise SystemExit(f"Ambiguous upload ({names}); specify --source PATH")
 
 
 def passthrough(src: Path, mdir: Path) -> None:
@@ -105,7 +120,7 @@ def from_docx(src: Path, mdir: Path) -> None:
 
     body = mdir / "_body.md"
     # Run with cwd=mdir so --extract-media writes *relative* figure paths.
-    run(PANDOC + [str(src), "-f", "docx+citations", "-t",
+    run(PANDOC + [str(src), "-s", "-f", "docx+citations", "-t",
                   "markdown+yaml_metadata_block-raw_attribute",
                   "--extract-media=figures", "--wrap=none", "-o", "_body.md"],
         cwd=mdir)
@@ -134,18 +149,28 @@ def from_latex(src: Path, mdir: Path) -> None:
     extracted = _extract_r2_macros(text)
 
     # Copy any .bib alongside the source.
-    bibs = list(src.parent.rglob("*.bib"))
+    declared = re.search(r"\\bibliography\{([^}]+)\}", text)
+    bibs = [(src.parent / (name.strip() if name.strip().endswith(".bib") else name.strip() + ".bib"))
+            for name in declared.group(1).split(",")] if declared else sorted(src.parent.glob("*.bib"))
+    if len(bibs) > 1 and not declared:
+        raise SystemExit("Several bibliographies found; declare the intended bibliography in the LaTeX source")
     if bibs:
-        shutil.copyfile(bibs[0], mdir / "references.bib")
+        (mdir / "references.bib").write_text("\n".join(p.read_text() for p in bibs))
         print(f"  bibliography: {bibs[0].name} -> references.bib")
     else:
         _warn_no_bib(mdir)
 
     body = mdir / "_body.md"
-    run(PANDOC + [str(src), "-f", "latex", "-t", "markdown",
-                  "--extract-media=figures", "--wrap=none", "-o", "_body.md"],
-        cwd=mdir)
-    text = _convert_metafiles(mdir, body.read_text(encoding="utf-8"))
+    # Package files describe layout; expanding arbitrary .sty files can make
+    # Pandoc loop (for example PRIMEarxiv's author macros). Retain document
+    # content and explicit macros, but omit package loading during import.
+    import_text = re.sub(r"\\usepackage(?:\[[^\]]*\])?\{[^}]*\}", "", text)
+    import_text = re.sub(r"\\cmidrule(?:\[[^\]]*\])?(?:\([^)]*\))?\{[^}]*\}", "", import_text)
+    run(PANDOC + ["-s", "-f", "latex", "-t", "markdown",
+                  "--extract-media=" + str(mdir / "figures"), "--wrap=none", "-o", str(body)],
+        cwd=src.parent, input_text=import_text)
+    text = body.read_text(encoding="utf-8").replace(str(mdir / "figures") + "/", "figures/")
+    text = _convert_metafiles(mdir, text)
     _assemble_qmd(mdir, text, extracted)
     body.unlink(missing_ok=True)
 
@@ -178,20 +203,17 @@ def _assemble_qmd(mdir: Path, body: str, extracted: dict | None = None) -> None:
         fm, body = m.group(1), m.group(2)
 
     extracted = extracted or {}
-    if "abstract" in extracted and "abstract" not in fm:
-        fm += f'\nabstract: >\n  {extracted["abstract"]}\n'
-    if "keywords" in extracted and "keywords" not in fm:
-        kws = ", ".join(k.strip() for k in re.split(r"[,;]", extracted["keywords"]))
-        fm += f"\nkeywords: [{kws}]\n"
-
-    if fm.strip():
-        if "bibliography" not in fm:
-            fm += "\nbibliography: references.bib\n"
-        content = f"---\n{fm.strip()}\n---\n\n{body}"
+    meta = yaml.safe_load(fm) or {}
+    if "abstract" in extracted and not meta.get("abstract"):
+        meta["abstract"] = extracted["abstract"]
+    if "keywords" in extracted and not meta.get("keywords"):
+        meta["keywords"] = [k.strip() for k in re.split(r"[,;]|\\and", extracted["keywords"]) if k.strip()]
+    if meta:
+        meta["bibliography"] = "references.bib"
+        content = "---\n" + yaml.safe_dump(meta, allow_unicode=True, sort_keys=False) + "---\n\n" + body
     else:
         content = FRONT_MATTER_SKELETON.format(body=body)
-        print("  NOTE: no metadata detected — article.qmd uses a TODO skeleton; "
-              "fill it in (validation will fail until then).")
+        print("No metadata detected; complete the TODO fields before approval.")
     (mdir / "article.qmd").write_text(content, encoding="utf-8")
     print("  wrote article.qmd")
 
@@ -251,27 +273,52 @@ def _warn_no_bib(mdir: Path) -> None:
     (mdir / "references.bib").touch(exist_ok=True)
 
 
-def main(manuscript_dir: str) -> int:
+def main(manuscript_dir: str, *, source: str | None = None,
+         reimport: bool = False) -> int:
     mdir = Path(manuscript_dir).resolve()
-    src = find_source(mdir)
-    print(f"Source: {src}  (.{src.suffix.lower().lstrip('.')})")
+    if (mdir / "article.qmd").exists() and not reimport:
+        print("Canonical article.qmd already exists; preserving copy-edits. "
+              "Use --reimport to prepare a separate import for comparison.")
+        return 0
+    if source and not Path(source).exists() and (mdir / "source").is_dir():
+        _candidates_in(mdir / "source")
+    src = Path(source).resolve() if source else find_source(mdir)
+    if not _is_real_source(src):
+        raise SystemExit(f"Unsupported source file: {src}")
+    # A reimport is a proposal, never a replacement for the edited article.
+    target = mdir
+    if reimport:
+        stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        target = mdir / ".imports" / stamp
+        target.mkdir(parents=True)
+        if (mdir / "references.bib").exists():
+            shutil.copyfile(mdir / "references.bib", target / "references.bib")
+    print(f"Source: {src}")
     ext = src.suffix.lower()
-    (mdir / "figures").mkdir(exist_ok=True)
-
+    (target / "figures").mkdir(exist_ok=True)
     if ext in {".qmd", ".md", ".rmd"}:
-        passthrough(src, mdir)
+        passthrough(src, target)
+        # Keep relative links and bibliography usable after an import.
+        for asset in src.parent.iterdir():
+            if asset == src or asset.name.startswith("."):
+                continue
+            if asset.name == "figures" and asset.is_dir():
+                shutil.copytree(asset, target / "figures", dirs_exist_ok=True)
+            elif asset.suffix.lower() in {".bib", ".png", ".jpg", ".jpeg", ".svg", ".pdf"}:
+                if asset.resolve() != (target / asset.name).resolve():
+                    shutil.copyfile(asset, target / asset.name)
     elif ext in {".docx", ".doc"}:
-        from_docx(src, mdir)
+        from_docx(src, target)
     elif ext == ".tex":
-        from_latex(src, mdir)
-    else:
-        raise SystemExit(f"Unsupported source type: {ext}")
-    print("Normalization complete.")
+        from_latex(src, target)
+    print(f"Import complete: {target / 'article.qmd'}")
     return 0
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("usage: normalize.py <manuscript-dir>", file=sys.stderr)
-        sys.exit(2)
-    sys.exit(main(sys.argv[1]))
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("manuscript_dir")
+    ap.add_argument("--source", help="Explicit main upload when several files are present")
+    ap.add_argument("--reimport", action="store_true", help="Write a proposal under .imports/; preserve edits")
+    args = ap.parse_args()
+    sys.exit(main(args.manuscript_dir, source=args.source, reimport=args.reimport))
