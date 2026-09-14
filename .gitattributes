@@ -1,0 +1,2 @@
+# Preserve upstream schema formatting and collapse vendored modules in reviews.
+engine/schemas/** -whitespace linguist-vendored=true

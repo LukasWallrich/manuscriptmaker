@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import argparse
 import base64
+import zipfile
 from pathlib import Path
 
-import yaml
+from lxml import etree
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 import r2meta
@@ -25,7 +26,7 @@ TEMPLATES_DIR = Path(__file__).resolve().parents[1] / "templates"
 GALLEY_SPECS = [
     ("article.pdf", "PDF", "Article Text", "application/pdf"),
     ("article.html", "HTML", "Article Text", "text/html"),
-    ("article.xml", "JATS XML", "Article Text", "application/xml"),
+    ("article-jats.zip", "JATS XML and figures", "Article Text", "application/zip"),
 ]
 
 
@@ -40,15 +41,30 @@ def build(manuscript_dir: Path, out_dir: Path | None) -> Path:
     ojs = meta.get("ojs", {})
     authors = meta.get("_authors", [])
 
-    fallback_email = next((a["email"] for a in authors if a["email"]),
-                          f"noreply@{ojs.get('journal-path', 'journal')}.invalid")
+    issues = __import__("validate_meta").check(manuscript_dir, "release")
+    if issues:
+        raise ValueError("Publication validation failed: " + "; ".join(i["message"] for i in issues))
 
+    xml_path = manuscript_dir / "article.xml"
+    if not xml_path.is_file():
+        raise ValueError("Required galley missing: article.xml")
+    tree = etree.parse(str(xml_path), etree.XMLParser(resolve_entities=False, no_network=True))
+    with zipfile.ZipFile(manuscript_dir / "article-jats.zip", "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.write(xml_path, "article.xml")
+        assets = set(tree.xpath('//@xlink:href', namespaces={"xlink": "http://www.w3.org/1999/xlink"}))
+        from urllib.parse import unquote, urlparse
+        for href in sorted(assets):
+            if urlparse(href).scheme or href.startswith("#"):
+                continue
+            asset = (manuscript_dir / unquote(href)).resolve()
+            if not asset.is_relative_to(manuscript_dir.resolve()) or not asset.is_file():
+                raise ValueError(f"Missing JATS asset: {href}")
+            archive.write(asset, href)
     galleys = []
     for fid, (fname, label, genre, mime) in enumerate(GALLEY_SPECS, start=1):
         fpath = manuscript_dir / fname
         if not fpath.exists():
-            print(f"  [skip] galley not found: {fname}")
-            continue
+            raise ValueError(f"Required galley missing: {fname}")
         b64, size = _b64(fpath)
         ext = fname.rsplit(".", 1)[-1]
         galleys.append({
@@ -65,12 +81,13 @@ def build(manuscript_dir: Path, out_dir: Path | None) -> Path:
         abstract = " ".join(abstract.split())
 
     ctx = {
-        "locale": (meta.get("lang") or "en").replace("-", "_"),
+        "locale": (meta.get("lang") or "en-US").replace("-", "_"),
         "journal": r2.get("journal", ""),
         "title": meta.get("title", ""),
         "abstract": abstract,
         "keywords": meta.get("keywords", []) or [],
         "authors": authors,
+        "primary_contact_id": next(i for i, a in enumerate(authors, 1) if a["corresponding"]),
         "doi": r2.get("doi", ""),
         "year": r2.get("year", ""),
         "date_published": str(meta.get("date", "")),
@@ -78,7 +95,6 @@ def build(manuscript_dir: Path, out_dir: Path | None) -> Path:
         "section_ref": ojs.get("section-ref", "ART"),
         "user_group_ref": ojs.get("user-group-ref", "Author"),
         "uploader": ojs.get("uploader", "admin"),
-        "fallback_email": fallback_email,
         "galleys": galleys,
     }
 
@@ -88,6 +104,11 @@ def build(manuscript_dir: Path, out_dir: Path | None) -> Path:
         trim_blocks=True, lstrip_blocks=True,
     )
     xml = env.get_template("ojs_native.xml.j2").render(**ctx)
+    schema_path = TEMPLATES_DIR.parent / "schemas/ojs-3.3/native.xsd"
+    if str(ojs.get("schema-version", "3.3")) != "3.3":
+        raise ValueError("Only the bundled OJS 3.3 schema is currently validated")
+    schema = etree.XMLSchema(etree.parse(str(schema_path)))
+    schema.assertValid(etree.fromstring(xml.encode("utf-8")))
 
     out_dir = out_dir or (manuscript_dir / "ojs")
     out_dir.mkdir(parents=True, exist_ok=True)

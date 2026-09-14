@@ -1,0 +1,383 @@
+---
+number-sections: true
+secnumdepth: 2
+abstract: 'Maintaining anonymity in natural language communication remains a challenging
+  task. Even when the number of candidate authors is large, standard authorship attribution
+  techniques that analyze writing style predict the original author with uncomfortably
+  high accuracy. Adversarial stylometry provides a defense against authorship attribution,
+  helping users avoid unwanted deanonymization. This paper reproduces and replicates
+  experiments from a seminal study of defenses against authorship attribution [@brennan2012adversarial].
+  After reproducing the experiment using the original data, we then replicate the
+  experiment by repeating the online field experiment using the procedures described
+  in the original paper. Although we reach the same conclusion as the original paper,
+  our results suggest that the defenses studied may be overstated in their effectiveness.
+  This is largely due to the absence of a control group in the original study. In
+  our replication, we find evidence suggesting that an entirely automatic method,
+  round-trip translation, warrants re-examination because it appears to reduce the
+  effectiveness of established authorship attribution methods.
+
+  '
+author:
+- name:
+    given: Haining
+    family: Wang
+  email: hw56@iu.edu
+  affiliations:
+  - ref: indiana-med
+- name:
+    given: Patrick
+    family: Juola
+  email: juola@mathcs.duq.edu
+  affiliations:
+  - ref: duquesne
+- name:
+    given: Allen
+    family: Riddell
+  email: riddella@iu.edu
+  affiliations:
+  - ref: indiana-bloomington
+bibliography: references.bib
+title: Reproduction and Replication of an Adversarial Stylometry Experiment
+keywords:
+- adversarial stylometry
+- authorship attribution
+- authorship identification
+- stylometry
+- writing style
+- whistleblower protection
+affiliations:
+- id: indiana-med
+  name: Indiana University School of Medicine
+- id: duquesne
+  name: Duquesne University
+- id: indiana-bloomington
+  name: Indiana University Bloomington
+---
+
+# Introduction
+
+Commercial and government entities are known to monitor the online activities of individuals through techniques such as Internet Protocol (IP) traffic analysis and behavioral fingerprinting, posing well-documented threats to user privacy. Anonymous communication provides a counterweight to these threats by enabling individuals to communicate online without disclosing their identity. Through techniques such as encryption and anonymous routing, individuals can shield their online activities from being monitored and tracked. Nevertheless, maintaining anonymity remains a challenge, even with a secure channel. This is because the analysis of an individual's writing style typically yields useful clues about their identity.
+
+*Authorship attribution* techniques allow an adversary to guess the author of an anonymous text by comparing the writing style in the unsigned text with the style found in writing samples from likely authors. Past research shows that authorship attribution techniques tend to identify the author of an unsigned text at a rate far better than chance [@juola2008authorship; @koppel2009computational; @stamatatos2009survey]. To achieve this rate of success, only a modest amount of pre-existing writing needs to be collected from candidate authors [@rao2000can; @eder2015does]. For example, previous research reports that standard authorship attribution methods achieve over 90% accuracy given a set of 50 candidate authors [@abbasi2008writeprints] and 20% accuracy given 100,000 candidates [@narayanan2012feasibility]. The models used in the studies are familiar (e.g., support vector machines and naïve Bayes classifiers) and use a few hundred linguistic features extracted from a few thousand words of pre-existing writing. For individuals who wish to remain anonymous while sharing even modest amounts of prose, standard authorship attribution methods present a serious obstacle.
+
+Authorship attribution's threat to user privacy has arguably increased in recent years because collecting pre-existing writing samples has become easier: in an era of text-based social media, writing samples are frequently available online. In a survey conducted by the Pew Research Center, 38% of 792 American adults reported that "things \[they\] have written using \[their\] name\[s\]" were available online [@rainie2013anonymity]. It is therefore a matter of some urgency to develop and refine techniques to defeat or frustrate stylometric fingerprinting.
+
+The defense against authorship fingerprinting, termed *adversarial stylometry*, aims to prevent involuntary deanonymization by "apply\[ing\] deception to writing style to affect the outcome of stylometric analysis" [@brennan2012adversarial]. Past research on adversarial stylometry has focused on manual interventions, wagering that a motivated individual may be able to alter their prose style in a new document to such a degree that standard authorship attribution methods will struggle to associate the document with the individual's previous writing. Manual interventions to obscure one's style deserve attention even if they ultimately prove less effective than machine-supported style obfuscation methods, since they can be used when no trusted computational resources are available. Such a setting is easy to imagine in the case of whistleblowing. For example, an employee at a financial firm who seeks to expose wrongdoing while maintaining anonymity may lack immediate access to an unmonitored computer.
+
+#### Contribution
+
+In this paper, we report on a reproduction and, separately, a replication of the experiment described in @brennan2012adversarial. First, we carefully *reproduce* the experiment using the materials and methods described in the original paper. We perform this reproduction in order to double-check the original findings. We are motivated here by the recommendation, found in numerous academic communities, that reproduction of previous studies be regarded as an essential practice [@stodden2014implementing]. Second, we *replicate* the experiment using a new population of writers. In our replication, we correct oversights in the original design, chief among them the absence of a control group. The contributions of this work are as follows:
+
+- We confirm the usefulness of two manual adversarial strategies. Given ten candidate authors, imitation reduces the accuracy of a standard authorship attribution model to 22% and obfuscation to 14%, against a control-group baseline of 37%.
+
+- Our study confirms that an automatic intervention, round-trip machine translation, appears to be useful in obscuring one's writing style, though less effective than the two manual interventions.
+
+- We contribute a new corpus, assembled to perform the replication, that can be used in adversarial stylometry research: the Riddell-Juola corpus.
+
+# Related Works
+
+Following @brennan2012adversarial, we refer to techniques that aim to frustrate authorship attribution as adversarial stylometry. The goal of adversarial stylometry is to hide distinguishing elements of one's writing style while still communicating successfully. Ideally, the use of style obfuscation techniques should not leave conspicuous traces [@potthast2016author].
+
+In their seminal study, @brennan2012adversarial examine three strategies for obscuring an author's writing style. Two of these strategies are manual: *obfuscation*, in which an author simply writes differently than they ordinarily would; and *imitation*, in which an author emulates the idiosyncratic style of a different author. The third, automated strategy is known as *round-trip translation* (or "back translation"). This strategy takes advantage of machine translation software and translates the original prose to one or more intermediate languages before returning to the original language. The effectiveness of these three strategies was evaluated using a corpus derived from a field experiment (described in Section [4.1](#sec:ebg)). @brennan2012adversarial reported that the two manual interventions caused the performance of their most effective authorship attribution model to approach or fall below chance level. Although round-trip translation was less effective, it still meaningfully hindered authorship attribution.
+
+Since the publication of the study, numerous automatic approaches have been proposed. Round-trip translation, in particular, has been widely tested with various intermediate languages [@brennan2012adversarial; @mack2015best; @day2016towards]. In general, round-trip translation modifies an author's writing style to some degree and only slightly distorts the semantic content of the prose. Although studies show that translation software, intermediate languages, and round-trip iteration count can be guessed [@caliskan2012translate; @day2016towards], this knowledge poses no immediate threat to author identity. Notably, most studies using machine translation, including that of @brennan2012adversarial, use statistical machine translation. More recent research using neural machine translation demonstrates that round-trip translation can effectively alter style in a way that makes guessing demographic characteristics of writers more difficult [@xu2019privacy; @adelani2021preventing].
+
+Instead of using generic machine translation, attempts have been made to obscure an author's style by "transferring" a foreign source style to the document. For instance, @emmery2018style employed an LSTM-based encoder-decoder translation model trained on verse pairs from distinct English versions of the Bible, including both the Old and New Testaments [@carlson2018evaluating]. This model allows the translation of verses into specific styles derived from other Bible versions. This approach managed to generate verses that deceived a strong adversary into performing below chance levels while preserving the semantic content of the original. When high-quality parallel data is not available, which is often the case, researchers have employed training methods that do not depend on aligned corpora. These methods include autoencoders [@bakhteev2017author; @bo2020authorship], generative adversarial networks [@shetty2018a4nt], and variational autoencoders [@weggenmann2022dp_vae], possibly combined with multiple *ad hoc* decoders [@shetty2018a4nt] and disentangled representations [@emmery2018style].
+
+However, software maintenance has emerged as a significant hurdle to the widespread adoption of these automatic techniques. For example, Anonymouth [@mcdonald2012use] is software that can analyze a user's writing and then offer words that should be used at a higher or lower rate in order to frustrate authorship attribution. Despite Anonymouth being open-source and available for download, its lack of maintenance renders it virtually unusable on contemporary operating systems. At present, no actively maintained automatic or computer-assisted writing obfuscation tools appear to be accessible to non-technical users.
+
+Manual circumvention, by contrast, attempts to inject unpredictable variation into an individual's writing style by prompting the author to consciously make an attempt to disguise their writing, either via writing differently or by mimicking a pre-existing style. Despite the impressive performance reported by @brennan2012adversarial, manual approaches remain less studied than their automated counterparts. In addition to their independence from computational resources, another merit of manual approaches is that an individual author's tendency to write prose with author-identifying stylistic fingerprints appears to be variable, suggesting that there is considerable "room" for an intervention to work. Changes in topic can alter author-identifying fingerprints [@sapkota2014cross; @altakrori2021topic], as can changes in document genre [@kestemont2012cross; @overdorf2016blogs]. Even the way a writer inputs a text into the computer can make a difference, e.g., via a browser's text box or via a word processor running locally [@wang2021mode]. Notably, when @almishari2014fighting asked individuals from Amazon Mechanical Turk (MTurk) to rewrite a given text, they found the user-generated adversarial samples to be better than round-trip samples in terms of semantic preservation and circumventing fingerprinting. In short, untrained writers seem to have the capacity to modify texts in ways that are relevant to authorship attribution.
+
+# Research Question
+
+We investigate how well standard authorship attribution models perform when a defensive strategy is used. In this paper, we reproduce the study of @brennan2012adversarial using the original corpus (the Extended Brennan-Greenstadt corpus). The reproduction is described in Section [4](#sec:reproduction). We also replicate the experiment using a new corpus, the Riddell-Juola corpus. Section [5](#sec:replication) describes the replication. We measure the effectiveness of an intervention by calculating how much it reduces the performance of a standard authorship attribution classifier. This reduction is measured relative to an estimate of how well the same classifier would have performed had the defensive technique not been used.
+
+# Reproduction {#sec:reproduction}
+
+In this section, we report on a reproduction of the study conducted by @brennan2012adversarial using its methods and corpus, the Extended Brennan-Greenstadt corpus.
+
+## Extended Brennan-Greenstadt Corpus {#sec:ebg}
+
+The Extended Brennan-Greenstadt corpus (EBG) contains writing from 45 individuals recruited on MTurk no later than 2012. Two distinct types of writing were collected from participants: pre-existing samples and responses to writing prompts.
+
+For the pre-existing samples, each participant uploaded at least 6,500 words of formal writing. The participants were instructed not to upload writing containing extensive "dialog/quotations" or samples "less than 500 words, laboratory and other overly scientific reports, Q&A-style samples such as exams, \[or\] anything written in another person's style" [@brennan2012adversarial].
+
+After uploading writing samples, each participant was asked to write two short essays responding to two different writing prompts. Accompanying each prompt were instructions on how to modify one's writing style in order to frustrate someone trying to identify the essay's author on the basis of their writing style. The first prompt asked the participant to write ca. 500 words describing their neighborhood to someone who has never been there. The prompt is prefaced with the instruction that the participant should try to hide their identity by changing their style of writing. No suggestions are given to the participant regarding how they should go about the change. This strategy is labeled the obfuscation strategy.
+
+For the second prompt, participants were asked to describe a day in their life using third-person narration. To conceal their writing style, they were instructed to imitate the distinctive writing style of the novelist Cormac McCarthy. This is labeled the imitation strategy. Participants were given a 2,500-word excerpt of McCarthy's writing from *The Road* and told to read the excerpt before composing their response.
+
+Table [1](#tbl:corpus){reference-type="ref" reference="tbl:corpus"} summarizes the Extended Brennan-Greenstadt corpus. Additional details can be found in @brennan2012adversarial.
+
+::: {#tbl:corpus}
++--------+-------------+---------+----------------------+---------------------+
+| Corpus | Task        | Authors | Avg. Training Length | Avg. Testing Length |
++:======:+:===========:+:=======:+:====================:+:===================:+
+| EBG    | Obfuscation | 45      | 8,727                | 564                 |
+|        +-------------+---------+----------------------+---------------------+
+|        | Imitation   | 45      | 8,727                | 574                 |
++--------+-------------+---------+----------------------+---------------------+
+| RJ     | Control     | 21      | 7,064                | 582                 |
+|        +-------------+---------+----------------------+---------------------+
+|        | Obfuscation | 27      | 7,829                | 570                 |
+|        +-------------+---------+----------------------+---------------------+
+|        | Imitation   | 17      | 7,752                | 583                 |
++--------+-------------+---------+----------------------+---------------------+
+
+: Summary of corpora used in the reproduction and replication experiments. Text lengths are reported in words.
+:::
+
+## Method
+
+@brennan2012adversarial examine how authorship attribution classifier accuracy declines when a user attempts to conceal their writing style by using a defensive technique. Three different authorship attribution defenses are considered. For each defense, @brennan2012adversarial examine how the size of the candidate pool affects classifier accuracy by sampling 1,000 sets of candidate authors from the pool of 45 authors. They consider sets of size 5, 10, 15, 20, 25, 30, 35, and 40, each drawn randomly from the candidate pool without replacement. For each set, authorship attribution models are trained using the candidates' pre-existing writing samples as training data. The models are then asked to predict the author of essays composed in response to the prompts. In other words, the elicited essays form the test sets. The performance of the classifier on the test set is compared with a baseline: classifier accuracy on the pre-existing writing samples, where performance is measured using 10-fold cross-validation. Our reproduction follows the same protocol: at each candidate-pool size, we draw 1,000 candidate sets for the elicited-essay test sets, and for the cross-validation baseline, we draw 100 candidate sets and evaluate each with 10-fold cross-validation, giving the same number of accuracy measurements.
+
+The effectiveness of the round-trip translation strategy was evaluated briefly in @brennan2012adversarial with a completely different corpus (the Brennan-Greenstadt corpus). The translated texts and implementation details cannot be recovered. Therefore, we did not examine the round-trip translation strategy in the reproduction study; we revisit this strategy in the replication study below. We also take the liberty of reporting results obtained using two additional authorship attribution models, one using a simpler feature set and another using a pretrained transformer language model.
+
+### Writeprints-static and Support Vector Machine Classifier
+
+@brennan2012adversarial measured the effectiveness of authorship attribution using three models. A support vector machine (SVM) model with a polynomial kernel using the "Writeprints-static" feature set proved by far the most successful. This was not unexpected: the other models considered were unorthodox and have seen limited use by other researchers. Because the SVM model has been widely used and because it proved most successful in the study, we use this model in the reproduction study.
+
+#### Writeprints-static feature set
+
+The Writeprints-static feature set is a simplified version of the "Writeprints" feature set proposed by @abbasi2008writeprints. The feature set includes 557 fixed ("static") lexical and syntactic features; among these are frequent character bi- and trigrams, part-of-speech tags, and 403 function words.
+
+We carefully re-implemented the Writeprints-static feature set in Python by consulting Jstylo's GitHub repository [@mcdonald2012use].[^1] Our re-implementation uses 552 features. Features in the original study were recovered precisely with minor exceptions. Where a feature could not be recovered exactly, a close substitute was used.[^2]
+
+#### Polynomial SVM
+
+@brennan2012adversarial report using an SVM model with a polynomial kernel but do not indicate the parameters they used. To find suitable parameters, we performed a grid search on the training examples of the Extended Brennan-Greenstadt corpus (10-fold cross-validation). The range of parameters searched follows the suggestions of the LIBSVM authors [@CC01a].
+
+We chose an SVM model using a polynomial kernel with the following parameters: degree ($d$) equal to 3, regularization ("C") equal to $0.01$, $\gamma$ equal to $0.001$, and constant bias $r$ equal to 100. Many sets of parameters performed roughly as well as these. The chosen polynomial SVM has an average accuracy of 82.1% in attributing authorship given 40 candidates, the largest candidate-pool size in our sweep (100 candidate sets, each evaluated by 10-fold cross-validation)---within 1.2 percentage points of the 80.9% we recover from Figure 6 of the original study at the same candidate-pool size.
+
+Most of the Writeprints-static features are counts (e.g., of POS tags or function words). Because documents differ in length, we normalize each document's feature vector by the sum of its elements. Each feature is then standardized by dividing by the standard deviation after mean-centering.
+
+### Koppel-512 with Logistic Regression
+
+The "Koppel-512" function word list contains 512 function words adopted from the widely-cited authorship attribution experiment described in @koppel2009computational. Function words are typically free of obvious meaning (e.g., "the", "and", "or", and "this") and have been used extensively in authorship attribution research [@kestemont2014function]. We use standard multi-class logistic regression with quadratic regularization ($\lambda = 1.0$). Function word frequencies are normalized and standardized using the same preprocessing as for the Writeprints-static features. The classifier performance is roughly similar to that of the Writeprints-static-based SVM model.
+
+We include this model chiefly because we anticipate that future researchers interested in reproducing our results will have no difficulty extracting features from the texts in a way that matches our implementation. In particular, extracting features using the Koppel-512 feature set should be considerably easier than extracting features using the Writeprints-static feature set.
+
+### RoBERTa
+
+We further adopt a RoBERTa model [@liu2019roberta] pretrained with five large corpora (the Book Corpus, English Wikipedia, Common Crawl-News, OpenWebText, and Stories corpora). The model ("roberta-base") is provided by @wolf2020transformers. We adapt the model for classification by continuing to train using our data, updating only the parameters in a final layer for classification. We use a low learning rate ($3\text{e--}5$), and all samples are padded or truncated to 512 tokens, as the model requires. During training, we hold out the first training example from each of the candidates to create a validation set. The model is trained until validation loss fails to improve for 50 epochs. In general, this occurs after no more than 200 epochs. We use parameters associated with the lowest validation loss.
+
+Note that we use this model slightly differently than we do the other models. First, with RoBERTa, we refrain from running cross-validation on the training data because cross-validation is not a standard practice when using deep learning models. Second, to reduce computational cost, we consider only ten (instead of 1,000) runs at each candidate size.
+
+## Results
+
+The results of the reproduction study are summarized in Figure [1](#fig:reproduction){reference-type="ref" reference="fig:reproduction"}, whose three panels correspond to Figures 6--8 in @brennan2012adversarial. For comparison with the original, we show the accuracy statistics reported in the original paper side-by-side with our results.[^3]
+
+![Reproduction of the adversarial stylometry experiment in @brennan2012adversarial using the Extended Brennan-Greenstadt corpus. From left to right, the panels show classifier accuracy on the training data (10-fold cross-validation), under the obfuscation strategy, and under the imitation strategy. Writeprints-static features are classified with a polynomial-kernel SVM and Koppel-512 function words with logistic regression; "Brennan et al. (2012)" reproduces the accuracies reported in the original study, recovered from its Figures 6--8. Bars indicate mean accuracy; error bars show 95% confidence intervals. Sampling follows the protocol described in Section [4](#sec:reproduction); the RoBERTa model uses ten runs per candidate-pool size. Cross-validation is not performed with the RoBERTa model.](figures/reproduction_summary.png "fig:"){#fig:reproduction width="\\textwidth"}
+
+The left panel of Figure [1](#fig:reproduction){reference-type="ref" reference="fig:reproduction"} shows classifier accuracy on the training data measured using 10-fold cross-validation. The middle and right panels show the accuracy of the authorship attribution classifier when the subject uses the indicated defensive strategy. As we saw in the original paper, classifier performance drops dramatically when either defensive strategy is used, and the imitation strategy is more successful than the obfuscation strategy at confusing the Writeprints-static-based SVM classifier.
+
+# Replication {#sec:replication}
+
+To further increase confidence in the original result, we replicate the study in @brennan2012adversarial, re-running the experiment with new participants.[^4] We label the new corpus of writing samples, analogous to the Extended Brennan-Greenstadt corpus, the Riddell-Juola corpus. In our replication, we correct two conspicuous flaws in the original experiment design: the lack of a control group and the non-random assignment of writing prompts. We resolve the first flaw by introducing a control condition and the second by using a single writing prompt, so each participant produced one essay rather than two.
+
+In addition to the formal replication, we informally explore the round-trip translation defense discussed in the original study.
+
+## Riddell-Juola Corpus
+
+The Riddell-Juola Corpus (RJ) was gathered using essentially the same procedure as that used to compile the Extended Brennan-Greenstadt corpus [@brennan2012adversarial]. The obfuscation and imitation strategy instructions from the original study were reused, as was the describe-your-neighborhood writing prompt.[^5]
+
+As in the original study, participants were recruited on MTurk. About 6,500 words of pre-existing formal writing were solicited with the same instructions used in the original study. These writing samples comprise the training data for the authorship attribution classifier.
+
+For the ca. 500-word essay, participants were instructed to respond to the describe-your-neighborhood writing prompt. The beginning of each prompt reads: "You are asked as part of a college application to describe your neighborhood to someone who has never been there before."
+
+In contrast to the original study, participants were randomly assigned to receive no additional instruction (*control*), the obfuscation strategy instruction, or the imitation strategy instruction. Each participant only submitted a single 500-word essay in response to the describe-your-neighborhood prompt. This design eliminates concerns about order effects and the relative ease (or difficulty) of "executing" specific strategies with particular prompts.[^6]
+
+As in the original study, the authorship attribution model must predict the authorship of these ca. 500-word essays.
+
+### Round-trip Translation
+
+In the replication study, we leverage the essays composed in the control condition to evaluate how well round-trip translation conceals participants' writing style. We use the Google Translate API to translate between languages.[^7]
+
+We use the intermediate language choices from @brennan2012adversarial: the two single-step translations are English--German--English and English--Japanese--English; and the two-step translation is English--German--Japanese--English. Note that, when the original study was performed, Google was using statistical machine translation. The current system, introduced in 2016, uses neural machine translation.
+
+### Demographic Characteristics
+
+Responses were collected between March 29th and June 1st, 2019. Respondents completed a demographic questionnaire, reporting their gender and age bracket (Table [2](#tbl:demographics){reference-type="ref" reference="tbl:demographics"}). We excluded responses that were not in English or that appeared inauthentic. The pre-existing writing samples were further processed in order to remove personally identifying information. Lengthy quotations, headings, tables, and figures were also removed. See Table [1](#tbl:corpus){reference-type="ref" reference="tbl:corpus"} for statistics describing the corpus. Participants provided informed consent by agreeing to participate after reading the study description on MTurk, which stated the purpose of the research and the nature of the tasks.
+
+::: {#tbl:demographics}
++--------------+-----------+-------------+-----------+---------+
+| Demographics | Attribute | Obfuscation | Imitation | Control |
++:============:+:=========:+:===========:+:=========:+:=======:+
+| Gender       | Woman     | 13          | 10        | 10      |
+|              +-----------+-------------+-----------+---------+
+|              | Man       | 14          | 7         | 11      |
++--------------+-----------+-------------+-----------+---------+
+| Age          | 18--34    | 18          | 12        | 16      |
+|              +-----------+-------------+-----------+---------+
+|              | 35--49    | 7           | 5         | 3       |
+|              +-----------+-------------+-----------+---------+
+|              | 50--64    | 2           | 0         | 2       |
++--------------+-----------+-------------+-----------+---------+
+
+: Demographic characteristics of participants contributing writing samples and essays to the Riddell-Juola corpus. Participants were assigned an authorship attribution circumvention strategy (or to the control group) uniformly at random.
+:::
+
+## Method
+
+In the replication, we adopted the same feature set, model, and setup as used in the reproduction.
+
+## Results
+
+The replication study generally confirms the effectiveness of the circumvention techniques reported in the original paper. The results of the replication experiment using the new Riddell-Juola corpus are summarized in Figure [2](#fig:replication){reference-type="ref" reference="fig:replication"}.
+
+![Replication of the adversarial stylometry experiment in @brennan2012adversarial using the Riddell-Juola corpus. From left to right, the top panels show classifier accuracy on the training data (10-fold cross-validation), under the obfuscation strategy, and under the imitation strategy; the bottom panels show accuracy on writing from the control group and under two round-trip translation strategies. Writeprints-static features are classified with a polynomial-kernel SVM and Koppel-512 function words with logistic regression. Bars indicate mean accuracy; error bars show 95% confidence intervals. Sampling follows the protocol described in Section [4](#sec:reproduction); the RoBERTa model uses ten runs per candidate-pool size. Cross-validation is not performed with the RoBERTa model. $n$ is the number of participants assigned to the condition.](figures/replication_summary.png "fig:"){#fig:replication width="\\textwidth"}
+
+The upper-left panel of Figure [2](#fig:replication){reference-type="ref" reference="fig:replication"} shows the accuracy of 10-fold cross-validation on the training data. Model performance slowly decreases as candidate count increases. However, with cross-validation, authorship attribution models can leverage topical information in documents in making predictions. (Submitted pre-existing writing samples often concern similar subjects.) Hence, the accuracy measured using the control group (bottom-left panel) is a more appropriate baseline. Recall that participants in the control group responded to a fixed topic, and no suggestion was made that they should modify their style. Because every participant in the control group writes on the same topic, the risk that topics overlap with those in pre-existing writing samples is negligible.
+
+The upper-middle and upper-right panels indicate the performance of the models when the corresponding strategy is used. Due to random assignment in the Riddell-Juola corpus, the number of writers using each strategy varies. When an authorship attribution circumvention strategy is used, classifier accuracy suffers relative to the control group.
+
+To test whether each circumvention strategy reduces classifier accuracy beyond the baseline reduction observed in the control group, we compared accuracy in each treatment condition against the control using one-sided Mann-Whitney $U$ tests at every shared candidate-pool size, with $p$-values Bonferroni-corrected across the five strategies (each $p$ multiplied by five and compared with the conventional 0.05 threshold; reported below as $p_{\text{adj}}$). We also confirmed that control-group accuracy exceeds the chance rate $1/k$ at every candidate-pool size (one-sided Wilcoxon signed-rank tests, all $p < .001$).
+
+Table [3](#tbl:nhst){reference-type="ref" reference="tbl:nhst"} reports the results. All 38 pairwise comparisons (19 per model) are significant at $p_{\text{adj}} < .001$; for the SVM, effect sizes (Cohen's $d$) range from 0.51 to 6.89. Obfuscation produces the largest accuracy reductions. At 20 candidates, obfuscation drives SVM accuracy to 4.3%, below the 5.0% chance rate. The control never approaches chance at any candidate-pool size.
+
+::: {#tbl:nhst}
++---------------------+------------+---------+-----------+--------------------------+-------------+
+| Strategy            | Candidates | Control | Treatment | $\Delta$ (pp)            | Cohen's $d$ |
++:====================+:==========:+:=======:+:=========:+:========================:+:===========:+
+| Obfuscation         | 5          | 48.9%   | 29.4%     | $+$`<!-- -->`{=html}19.5 | 1.12        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 10         | 36.6%   | 14.0%     | $+$`<!-- -->`{=html}22.6 | 2.20        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 15         | 32.3%   | 7.4%      | $+$`<!-- -->`{=html}24.9 | 3.74        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 20         | 30.2%   | 4.3%      | $+$`<!-- -->`{=html}25.9 | 6.89        |
++---------------------+------------+---------+-----------+--------------------------+-------------+
+| Imitation           | 5          | 48.9%   | 34.5%     | $+$`<!-- -->`{=html}14.5 | 0.78        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 10         | 36.6%   | 21.5%     | $+$`<!-- -->`{=html}15.1 | 1.34        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 15         | 32.3%   | 19.4%     | $+$`<!-- -->`{=html}12.9 | 1.92        |
++---------------------+------------+---------+-----------+--------------------------+-------------+
+| RT Japanese         | 5          | 48.9%   | 34.8%     | $+$`<!-- -->`{=html}14.1 | 0.73        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 10         | 36.6%   | 23.6%     | $+$`<!-- -->`{=html}13.0 | 1.18        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 15         | 32.3%   | 20.8%     | $+$`<!-- -->`{=html}11.5 | 1.56        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 20         | 30.2%   | 19.6%     | $+$`<!-- -->`{=html}10.6 | 3.86        |
++---------------------+------------+---------+-----------+--------------------------+-------------+
+| RT German           | 5          | 48.9%   | 38.9%     | $+$`<!-- -->`{=html}10.0 | 0.54        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 10         | 36.6%   | 26.5%     | $+$`<!-- -->`{=html}10.1 | 0.96        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 15         | 32.3%   | 23.6%     | $+$`<!-- -->`{=html}8.6  | 1.27        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 20         | 30.2%   | 22.6%     | $+$`<!-- -->`{=html}7.6  | 2.38        |
++---------------------+------------+---------+-----------+--------------------------+-------------+
+| RT German--Japanese | 5          | 48.9%   | 39.7%     | $+$`<!-- -->`{=html}9.2  | 0.51        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 10         | 36.6%   | 28.9%     | $+$`<!-- -->`{=html}7.7  | 0.71        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 15         | 32.3%   | 25.1%     | $+$`<!-- -->`{=html}7.1  | 1.03        |
+|                     +------------+---------+-----------+--------------------------+-------------+
+|                     | 20         | 30.2%   | 23.6%     | $+$`<!-- -->`{=html}6.6  | 2.53        |
++---------------------+------------+---------+-----------+--------------------------+-------------+
+
+: Treatment vs. control accuracy in the Riddell-Juola corpus (SVM, Writeprints-static). $\Delta$ is the accuracy reduction (control $-$ treatment) in percentage points (pp); Cohen's $d$ is the standardized effect size. $p$-values are from one-sided Mann-Whitney $U$ tests, Bonferroni-corrected across the five strategies. All comparisons are significant at $p_{\text{adj}}<.001$. The logistic regression results are qualitatively identical (all $d > 0.5$). The exploratory RoBERTa results (10 runs per cell) are not subjected to formal testing but show the same ordering: control accuracy equals or exceeds every treatment at all matched candidate-pool sizes.
+:::
+
+In contrast to the results obtained using the EBG corpus, the obfuscation strategy appears to be more effective than the imitation strategy.
+
+The results concerning the round-trip translation strategies are shown in the bottom-middle and bottom-right panels of Figure [2](#fig:replication){reference-type="ref" reference="fig:replication"}. We omit plotting German as the intermediate language because the strategy performs as well as the strategy using two intermediate languages. The round-trip through Japanese performs best among the round-trip translation strategies. The accuracy reduction achieved by the round-trip translation strategy is roughly the same as that achieved by the imitation strategy.
+
+## Examination of Translated Samples
+
+We examined the translated samples to make sure that their meaning remained consistent with the originals. In general, the meaning of sentences was preserved; poor translations were often attributable to unconventional language use and misspellings in the original prose, and drastic changes in meaning were rare. (See Table [4](#tbl:translations){reference-type="ref" reference="tbl:translations"} for examples of typical and infelicitous translations.) When using one intermediate language, semantics tend to be more faithfully preserved. Perfect reproduction of the original text is occasionally observed, especially for short sentences (e.g., Sample 5 in Table [4](#tbl:translations){reference-type="ref" reference="tbl:translations"}). We found that using Japanese as the intermediate language tended to produce fewer perfect round-trip translations, something desirable in the present context.
+
+Misspellings hurt the performance of the round-trip translation defense: they may be copied verbatim into the translated samples (Table [4](#tbl:translations){reference-type="ref" reference="tbl:translations"}, Sample 11), which could reveal an individual's identity if they tend to misspell particular words. Misspellings also appear to contribute to semantic loss in translation (Sample 10) and lead to other mistranslations (Samples 12 and 13).
+
+In short, this strategy appears to work well when original sentences are relatively simple and grammatical.
+
+::: {#tbl:translations}
+  Observations                 No.   Original                                                                                                                 Route         Translation
+  ---------------------------- ----- ------------------------------------------------------------------------------------------------------------------------ ------------- ----------------------------------------------------------------------------------
+  Synonym substitution         1     It's set upon a hill, surrounded by buildings with historical meaning.                                                   EN-DE-EN      It *is on* a hill, surrounded by buildings with historical *importance*.
+  Paraphrasing                 2     We were just young kids without a care in the world.                                                                     EN-JA-EN      We were young children without *worrying about* the world.
+                               3     Since I live in a large city, my neighborhood is extremely diverse.                                                      EN-DE-JA-EN   *I live in a big city, so my neighborhood is very diverse.*
+  Simplification               4     However, nowadays, a lot of people just use apps just as GrubHub and DoorDash to get their food delivered to them.       EN-JA-EN      *But today, many people* use apps *like* Grubhub and Doordash to *deliver food*.
+  "Perfect" back translation   5     It is a really perfect place to live.                                                                                    EN-JA-EN      It is a really perfect place to live.
+  Some semantic loss           6     There are countless cafés that were home to many hours of caffeine fueled cramming.                                      EN-DE-EN      There are countless cafés *in which many hours of caffeine were founded*.
+                               7     The lawns are kept in decent condition. Nobody has leaves piled up from fall time.                                       EN-JA-EN      The lawn is kept in a decent state. *Nobody has piled up since the fall time*.
+  Unacceptable semantic loss   8     She was from a town in which the grocery store was a 5 minute walk from her house\...                                    EN-DE-JA-EN   She came from her house 5 minutes from her house\...
+                               9     \...but I ended up getting close to someone who lives two houses down from me and another guy that lives on my street.   EN-JA-EN      \...but I *approached me from another man who lived* on my street.
+                               10    \...i am a drywall and T-bar instalator\...                                                                              EN-DE-EN      \...I am a drywall and T-bar *information*\...
+  Misspelling copying          11    The people don't feel as optomistic as they used to\...                                                                  EN-DE-EN      People don't feel as optomistic as before\...
+  Downstream mistranslation    12    The streets are wide and the kids usually play footbal\...                                                               EN-DE-EN      The streets are wide and the children usually play *foot bales*\...
+                               13    The streets are wide and the kids usually play footbal\...                                                               EN-DE-JA-EN   The street is large, and the children usually play *the BA on the feet*\...
+
+  : Observations from the translation samples. Obvious changes are marked in italic.
+:::
+
+# Discussion
+
+Overall, we consider this to be a successful replication of the primary claim: both manual strategies substantially reduced the accuracy of authorship attribution in our independent sample, consistent with the original finding. The control group, where participants wrote on the same prompt without any instruction to modify their style, provides the appropriate baseline for measuring the effectiveness of the circumvention strategies: it absorbs differences between training and test conditions that are unrelated to the circumvention strategies. Measured against this baseline, every treatment significantly reduces classifier accuracy (all $p_{\text{adj}} < .001$; Table [3](#tbl:nhst){reference-type="ref" reference="tbl:nhst"}), with SVM effect sizes ranging from $d = 0.51$ to $d = 6.89$. The original study, lacking a control, could only measure treatment accuracy against a cross-validation baseline that confounds classifier performance with topical overlap between training documents---which is why the effects reported there appear larger than those observed here. One discrepancy is that the relative performance of the two strategies is reversed; obfuscation outperforms imitation in our data, contrary to the original study.
+
+We speculate that this may be due to one or both of the following factors. First, the manual intervention writing samples vary greatly in quality due to the diversity of participants on MTurk. Individuals may simply vary in their ability to use the defense effectively. Second, the prompts used for eliciting writing samples using the imitation defense are different. It may be easier in some sense to use the defense when writing about one's day from a third-person perspective than when writing about one's neighborhood.
+
+Further study of the round-trip translation strategy---or style transformation using contemporary large language models [@fisher2024styleremix], such as prompted paraphrasing with instruction-tuned models [@chung2024flant5]---is warranted for three reasons. First, the technique merits attention because it requires no human intervention. This means it can be used in settings where the writer is unavailable or lacks time to perform a manual defense. Second, existing flaws such as mishandling of misspellings seem correctable given advances in language modeling [@karpukhin2019training]. Third, because the defense is automatic, it may be combined with a manual intervention---delivering, potentially, an incrementally more potent defense.
+
+If it proves effective, the round-trip translation must be usable offline. Relying on an online API, as we do here, would be an unacceptable risk for a whistleblower attempting to conceal their identity from a government or multinational firm that closely monitors IP traffic.
+
+# Conclusion
+
+This study investigated the effectiveness of three adversarial stylometry strategies: obfuscation, imitation, and round-trip translation. We estimated how much each strategy reduces the performance of a standard authorship attribution model. This study generally confirms the findings of @brennan2012adversarial: asking an individual to try to conceal their writing style yields prose that is more difficult for an authorship attribution model to link with the writer's preexisting writing. For example, in the setting where a classifier must predict the author of a text given ten candidates, imitation reduces classifier accuracy from 36.6% to 21.5% and obfuscation reduces it to 14.0% (Writeprints-static SVM; Table [3](#tbl:nhst){reference-type="ref" reference="tbl:nhst"}). This is a meaningful reduction. If these results generalize, an adversary using standard techniques to identify an individual who has used one of the manual defenses will learn less about the likely author of an unsigned text than they otherwise would. An adversary committed to acting based on the classifier's prediction will have a higher risk of incorrectly identifying a writer who is not the author of the unsigned text.
+
+# Social Impact & Responsibility {#social-impact-responsibility .unnumbered}
+
+This work studies defenses against authorship attribution, a procedure that can result in unwanted deanonymization of writers. Understanding when common defenses do and do not work can benefit individuals who have real needs for anonymous communication (e.g., whistleblowers and journalists). These defenses are dual use, but we expect their net effect to strengthen privacy for writers at risk; we highlight limitations and practical safety guidance.
+
+Our replication highlights a concrete safety consideration: using third-party online translation services may introduce additional privacy risks (e.g., metadata leakage or traffic monitoring). For high-risk users, any automated defense should be usable offline, and users should avoid relying on online APIs in adversarial settings.
+
+# Transparency Statement {#transparency-statement .unnumbered}
+
+We report how we determined our sample size, all data exclusions (if any), all manipulations, and all measures in the study.
+
+Sample size and inclusion/exclusion: For the reproduction, we analyzed the full Extended Brennan-Greenstadt (EBG) corpus (45 authors). For the replication, we recruited MTurk participants between March 29 and June 1, 2019 and analyzed all submissions meeting inclusion criteria; non-English, non-responsive, and likely inauthentic responses were excluded. Pre-existing writing samples were processed to remove personally identifying information. Participant-level metadata (self-reported gender, age bracket, task duration, collection date, and exclusion notes) are provided in `metadata.csv`.
+
+Manipulations and measures: In the replication, participants were randomly assigned to the control condition or to one of two manual defense instructions (obfuscation or imitation). We additionally evaluated round-trip translation on control essays using the Google Translate API. The primary outcome is authorship attribution accuracy under the evaluation protocol described in the manuscript.
+
+Connection to the original work: The authors have no overlapping authorship with the original study and no formal collaboration with the original authors on this manuscript.
+
+Competing interests: The authors declare no competing interests.
+
+Use of AI: Claude Opus 4.6 was used to proofread sections after the Conclusion (Social Impact & Responsibility, Transparency Statement, etc.); all analyses, claims, and final text were reviewed and verified by the authors.
+
+File-drawer statement: The authors report all reproduction and replication studies and analyses carried out for this manuscript.
+
+# Acknowledgments {#acknowledgments .unnumbered}
+
+This material is based upon work supported by the National Science Foundation under Grant No. 1814425. Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of the National Science Foundation.
+
+# Author Contributions {#author-contributions .unnumbered}
+
+Haining Wang: Data Curation; Investigation; Software; Formal analysis; Visualization; Writing -- Original Draft; Writing -- Review & Editing. Patrick Juola: Funding Acquisition; Writing -- Review & Editing. Allen Riddell: Conceptualization; Data Curation; Funding Acquisition; Methodology; Project Administration; Resources; Validation; Supervision; Writing -- Original Draft; Writing -- Review & Editing.
+
+# Preregistration {#preregistration .unnumbered}
+
+None of the reported studies were preregistered.
+
+# Data, Materials, and Code Availability {#data-materials-and-code-availability .unnumbered}
+
+A frozen reproducibility bundle (code, scripts, replication data, and study materials) is archived on Zenodo: <https://doi.org/10.5281/zenodo.18729526>. The archive contains `rr_bundle.zip` and records exact code/data commits in `FROZEN_COMMITS.txt`. Replication participant metadata are provided in `metadata.csv` within the archive. The MTurk study materials (prompt text and survey instrument) are included in the same archive.
+
+We do not redistribute EBG in our Zenodo archive as it is a third-party dataset distributed by the original authors. EBG is available from the Anonymouth repository at <https://github.com/psal/anonymouth/tree/master/jsan_resources/corpora/amt>. Our code expects EBG to be placed under `resource/Drexel-AMT-Corpus/` (see the Zenodo README for details).
+
+Licenses: Code in the Zenodo archive is released under the ISC license (see `LICENSE`). The Riddell-Juola corpus and associated metadata and study materials are released under CC0 1.0 (see `DATA_LICENSE`).
+
+[^1]: See <https://github.com/psal/jstylo>.
+
+[^2]: These differences come in two groups. First, the most frequent character bigram and trigram lists could not be recovered. We used the most frequent character bigrams and trigrams in the Brown corpus. Second, @brennan2012adversarial used a part-of-speech tagset consisting of 22 tags, which we cannot locate. We used the widely-used "universal" POS tagset V2, which consists of 17 tags. The Python package "writeprints-static" built for extracting the feature set is released on PyPI <https://pypi.org/project/writeprints-static>.
+
+[^3]: We recovered the accuracy statistics directly from their figures using WebPlotDigitizer [@Rohatgi2020].
+
+[^4]: Our experiment was approved by the Institutional Review Board of Indiana University (No. 1806940835).
+
+[^5]: Instructions and prompts used in the original study remain available at the original URL: <https://psal.cs.drexel.edu/tissec/CorpusParticipation.txt>.
+
+[^6]: A disadvantage of this new design is that each participant contributes only one essay. In retrospect, we realize there is a more cost-effective design available: ask respondents to write more than one essay but randomly assign the writing prompt as well as the defensive strategy.
+
+[^7]: The API is wrapped in the Python package "translators" (v.4.9.5).

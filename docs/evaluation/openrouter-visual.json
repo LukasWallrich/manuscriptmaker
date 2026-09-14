@@ -1,0 +1,37 @@
+{
+  "packet_id": "34e52dbdbac5448899a7ea074b606aab",
+  "passes": [
+    "import-fidelity"
+  ],
+  "summary": "Comparison between the accepted original image and the canonical/article.qmd file shows a discrepancy in the participant count. The original image states 'Participants: 120' while canonical/article.qmd states 'Participants: 102'. The title 'Accepted study record' matches in both.",
+  "limitations": [
+    "Synthetic visual test."
+  ],
+  "coverage": [
+    {
+      "file": "originals/accepted.png",
+      "status": "checked",
+      "notes": "Image checked against canonical/article.qmd text."
+    },
+    {
+      "file": "canonical/article.qmd",
+      "status": "checked",
+      "notes": "Text checked against original image."
+    }
+  ],
+  "issues": [
+    {
+      "pass": "import-fidelity",
+      "severity": "warning",
+      "category": "data discrepancy",
+      "file": "canonical/article.qmd",
+      "quote": "Participants: 102",
+      "source_file": "originals/accepted.png",
+      "source_quote": "Participants: 120",
+      "location": "line 3",
+      "explanation": "The number of participants differs between the accepted original image (120) and the canonical article.qmd text (102). This inconsistency may be an unintentional data error or an editorial change that needs verification.",
+      "suggested_correction": null,
+      "confidence": "high"
+    }
+  ]
+}

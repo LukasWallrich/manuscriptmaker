@@ -1,0 +1,11 @@
+# Test fixture. Publication fields await editorial assignment.
+workflow:
+  fixture: true
+r2:
+  article-id: Stylometry
+  article-type: Reproduction
+  discipline: Computer science
+  volume: null
+  year: null
+  doi: ""
+  running-head: Reproduction and Replication of an Adversarial Stylometry Experiment

@@ -1,0 +1,4 @@
+PyYAML==6.0.2
+Jinja2==3.1.6
+lxml==6.0.2
+Pillow==12.3.0
